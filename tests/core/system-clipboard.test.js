@@ -14,11 +14,17 @@ const clipboardPath = path.join(repoRoot, "src/core/system-clipboard.js");
 let clipboardImageSignature;
 let isStaleClipboardFrame;
 let CLIPBOARD_SIGNATURE_PENDING;
+let nameClipboardImageFile;
+let applyDataTransferToController;
 
 before(async () => {
-  ({ clipboardImageSignature, isStaleClipboardFrame, CLIPBOARD_SIGNATURE_PENDING } = await import(
-    "../../src/core/system-clipboard.js"
-  ));
+  ({
+    clipboardImageSignature,
+    isStaleClipboardFrame,
+    CLIPBOARD_SIGNATURE_PENDING,
+    nameClipboardImageFile,
+    applyDataTransferToController,
+  } = await import("../../src/core/system-clipboard.js"));
 });
 
 describe("core/system-clipboard.js", () => {
@@ -83,6 +89,47 @@ describe("core/system-clipboard.js", () => {
 
     it("pasteboard changed since copy (another app copied) → not stale, import it", () => {
       assert.equal(isStaleClipboardFrame(external, "512x512"), false);
+    });
+  });
+
+  // WebView2 is the only webview that puts the copied image on the paste
+  // event's DataTransfer, so Windows was the only platform to reach this code —
+  // where naming the file by assigning `file.name` threw, because it is a
+  // getter. Every paste on Windows died there and pasted nothing.
+  describe("pasted image files", () => {
+    /** An image off the clipboard: real bytes, no name, as WebView2 hands it over. */
+    const clipboardFile = (type) => new File([new Uint8Array([137, 80, 78, 71])], "", { type });
+
+    it("names an unnamed file from the type the clipboard declared", () => {
+      assert.equal(nameClipboardImageFile(clipboardFile("image/png")).name, "image.png");
+      assert.equal(nameClipboardImageFile(clipboardFile("image/jpeg")).name, "image.jpg");
+      assert.equal(nameClipboardImageFile(clipboardFile("image/webp")).name, "image.webp");
+      assert.equal(nameClipboardImageFile(clipboardFile("")).name, "image.png");
+    });
+
+    it("leaves a file that already has a name alone", () => {
+      const named = new File([new Uint8Array([1])], "screenshot.png", { type: "image/png" });
+      assert.equal(nameClipboardImageFile(named), named, "should not copy a file that needs nothing");
+    });
+
+    it("keeps the result a File, which the open path checks for", () => {
+      const renamed = nameClipboardImageFile(clipboardFile("image/png"));
+      assert.ok(renamed instanceof File);
+      assert.equal(renamed.type, "image/png");
+      assert.equal(renamed.size, 4, "the bytes must survive the rename");
+    });
+
+    it("hands the loader a named file instead of throwing on a read-only name", () => {
+      const loaded = [];
+      const controller = {
+        appData: { lastClipboardImageFileSize: 0 },
+        fileLoader: { loadLocalFiles: (files) => loaded.push(files[0]) },
+      };
+      const dataTransfer = { items: [{ type: "image/png", getAsFile: () => clipboardFile("image/png") }] };
+
+      assert.equal(applyDataTransferToController(controller, dataTransfer, null, null), true);
+      assert.equal(loaded.length, 1, "nothing was handed to the loader");
+      assert.equal(loaded[0].name, "image.png");
     });
   });
 });
