@@ -32,7 +32,13 @@ function tryInitWebGl(layerSystem) {
       alpha: true,
       antialias: false,
       depth: false,
-      premultipliedAlpha: false
+      premultipliedAlpha: false,
+      // This canvas is drawn when the document changes, not once per frame, and
+      // it is the element the workspace shows. Without this the browser is free
+      // to throw the drawing buffer away after each composite, leaving the
+      // canvas blank until something dirties the document again — which is what
+      // happens on WebKitGTK once its DMA-BUF renderer is off.
+      preserveDrawingBuffer: true
     };
 
   let gl;
