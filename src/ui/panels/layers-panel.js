@@ -47,7 +47,7 @@ function LayersPanel() {
   this.blendModeDropdown = new Dropdown(null, BlendModes.uiLabels, false, BlendModes.groupSizes);
   this.blendModeDropdown.on(EventType.widgetSelect, this.onBlendModeChange, this);
   this.headerEl.appendChild(this.blendModeDropdown.el);
-  this.opacitySlider = new SliderDropdown("properties.opacity", 0, 100, "%", 0);
+  this.opacitySlider = new SliderDropdown("properties.opacity", 0, 100, "%", 0).limitToDeclaredRange();
   this.opacitySlider.on(EventType.widgetSelect, this.onOpacityChange, this);
   this.opacitySlider.parent = this;
   this.headerEl.appendChild(this.opacitySlider.el);
@@ -57,7 +57,7 @@ function LayersPanel() {
   ]);
   this.lockFlagsRadio.on(EventType.widgetSelect, this.onLockFlagsChange, this);
   this.headerEl.appendChild(this.lockFlagsRadio.el);
-  this.fillSlider = new SliderDropdown("properties.fill", 0, 100, "%", 0);
+  this.fillSlider = new SliderDropdown("properties.fill", 0, 100, "%", 0).limitToDeclaredRange();
   this.fillSlider.on(EventType.widgetSelect, this.onFillChange, this);
   this.fillSlider.parent = this;
   this.headerEl.appendChild(this.fillSlider.el);

@@ -61,6 +61,13 @@ function NumberInputBase(
   this.emitWidgetSelectOnRangeChangeEndOnly = emitWidgetSelectOnRangeChangeEndOnly;
   this.minValue = minValue;
   this.maxValue = maxValue;
+  /**
+   * Whether `maxValue` is the largest value this field may hold, or only as far
+   * as its slider reaches. False by default: a feather radius or a baseline
+   * shift is routinely typed past the end of its slider, and the slider covers
+   * the useful range rather than the legal one. See {@link limitToDeclaredRange}.
+   */
+  this.valuesLimitedToRange = false;
   this.decimalPlaces = decimalPlaces;
   this.appendUnitToValueDisplay = appendUnitToValueDisplay;
   this.useLogarithmicRangeMapper = useLogarithmicRangeMapper;
@@ -89,9 +96,27 @@ NumberInputBase.prototype.buildUI = function() {
   applyTooltipTitles(this.quantityLabelEl, this.inputEl, this.labelKey, this.tooltipLocaleKey)
 };
 
+/**
+ * Declare that this field's range is its whole domain, so a typed value outside
+ * it is clamped rather than accepted.
+ *
+ * For a percentage that means what it says: 150% opacity is not a stronger
+ * stroke, it is a number the compositor multiplies with and clips, which shows
+ * up as banding and blown edges rather than as an error.
+ *
+ * @returns {this}
+ */
+NumberInputBase.prototype.limitToDeclaredRange = function() {
+  this.valuesLimitedToRange = true;
+  return this;
+};
+
 NumberInputBase.prototype.setValue = function(value, shouldEmit) {
   const minEqualsMax = this.minValue == this.maxValue;
   if (!minEqualsMax && this.minValue >= 0) value = Math.max(this.minValue, value);
+  if (this.valuesLimitedToRange && !minEqualsMax) {
+    value = Math.min(this.maxValue, Math.max(this.minValue, value));
+  }
   if (this.decimalPlaces == 0) value = Math.round(value);
   this.inputEl.value = formatNumericFieldDisplay(
     value,

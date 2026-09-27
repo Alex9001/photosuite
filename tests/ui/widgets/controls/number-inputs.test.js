@@ -111,4 +111,33 @@ describe("ui/widgets/controls/number-inputs.js", () => {
     // stays draggable.
     assert.equal(trackStyle, "width:116px;");
   });
+
+  // A slider's range is not always the field's domain: a feather radius or a
+  // baseline shift is routinely typed past the end of its slider. A percentage
+  // is the other kind — 1000% opacity is not a stronger stroke, it is a number
+  // the compositor clips, which shows as banding rather than as an error.
+  describe("limitToDeclaredRange", () => {
+    it("clamps a typed value to both ends of the range", () => {
+      const opacity = new SliderDropdown("properties.opacity", 0, 100, "%").limitToDeclaredRange();
+      opacity.setValue(1000);
+      assert.equal(opacity.getValue(), 100);
+      opacity.setValue(-20);
+      assert.equal(opacity.getValue(), 0);
+      opacity.setValue(45);
+      assert.equal(opacity.getValue(), 45);
+    });
+
+    it("leaves a field whose slider is only a convenient range alone", () => {
+      const feather = new SliderDropdown("select.feather", 0, 100, " px");
+      feather.setValue(250);
+      assert.equal(feather.getValue(), 250, "typing past the slider must still work here");
+    });
+
+    it("applies to RangeInput too, and returns the widget", () => {
+      const effectOpacity = new RangeInput("properties.opacity", 0, 100, "%");
+      assert.equal(effectOpacity.limitToDeclaredRange(), effectOpacity, "should chain");
+      effectOpacity.setValue(400);
+      assert.equal(effectOpacity.getValue(), 100);
+    });
+  });
 });

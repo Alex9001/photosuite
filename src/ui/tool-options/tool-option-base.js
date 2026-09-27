@@ -108,15 +108,15 @@ function BrushOptionBase(widgetKeys) {
       ])
     }
     if (widgetKey == "Opct") {
-      widget = new SliderDropdown("properties.opacity", 0, 100, "%");
+      widget = new SliderDropdown("properties.opacity", 0, 100, "%").limitToDeclaredRange();
       widget.setValue(100)
     }
     if (widgetKey == "flow") {
-      widget = new SliderDropdown("properties.flow", 0, 100, "%");
+      widget = new SliderDropdown("properties.flow", 0, 100, "%").limitToDeclaredRange();
       widget.setValue(100)
     }
     if (widgetKey == "smth") {
-      widget = new SliderDropdown("styleOptions.bevelTechnique.smooth", 0, 100, "%");
+      widget = new SliderDropdown("styleOptions.bevelTechnique.smooth", 0, 100, "%").limitToDeclaredRange();
       widget.setValue(0)
     }
     if (widgetKey == "samp") {
@@ -127,7 +127,7 @@ function BrushOptionBase(widgetKeys) {
       widget.setValue([40, true, true])
     }
     if (widgetKey == "strn") {
-      widget = new SliderDropdown("properties.strength", 1, 100, "%");
+      widget = new SliderDropdown("properties.strength", 1, 100, "%").limitToDeclaredRange();
       widget.setValue(50)
     }
     if (widgetKey == "smode") {
@@ -150,7 +150,7 @@ function BrushOptionBase(widgetKeys) {
       widget.setValue(1)
     }
     if (widgetKey == "expo") {
-      widget = new SliderDropdown("properties.exposure", 0, 100, "%");
+      widget = new SliderDropdown("properties.exposure", 0, 100, "%").limitToDeclaredRange();
       widget.setValue(50)
     }
     if (widgetKey == "algnd") {
