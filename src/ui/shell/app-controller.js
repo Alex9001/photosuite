@@ -348,9 +348,15 @@ AppController.prototype.resize = function(widthPx, heightPx) {
 AppController.prototype.onSystemCopy = function() {};
 
 // Window "paste" handler. Ignores pastes aimed at the type tool or a text input,
-// guards against re-entrancy, then routes by source: an image on the system
-// clipboard is imported; an internal pixel/path clipboard becomes a
-// paste-layers dispatch; otherwise the system clipboard is read asynchronously.
+// guards against re-entrancy, then routes by source: an image the event itself
+// carries is imported straight away; anything else goes to the paste-layers
+// command, which is the one place that decides between the system clipboard and
+// the internal one.
+//
+// That decision must not be made here. WebKitGTK hands this event no image data
+// for a picture copied from another application, so a keyboard paste that
+// answered it from the internal clipboard pasted the *previous* image — while
+// Edit > Paste, which asks the system clipboard first, pasted the right one.
 AppController.prototype.onSystemPaste = function(pasteEvent) {
   const textEntry = this.toolRegistry.entriesById[ToolId.TOOL_TYPE];
   if (textEntry && textEntry.tool && textEntry.tool.isActive()) return;
@@ -377,13 +383,18 @@ AppController.prototype.onSystemPaste = function(pasteEvent) {
     return;
   }
   if (appData.pathClipboard != null || appData.clipboardPixelPayload != null) {
+    // Same command Edit > Paste sends: it compares the system clipboard against
+    // the signature of our own last copy and only falls back to the internal
+    // clipboard when nothing newer is there. That handler takes the in-flight
+    // guard itself for the read it starts, so hand the guard over rather than
+    // holding it across the dispatch — held, it would turn the paste into a
+    // no-op.
+    this._pasteInFlight = false;
     const internalPaste = new AppEvent(EventType.uiDispatch, true);
     internalPaste.data = {
-      dispatchKind: UiCommand.clipboardPasteLayers,
-      skipInternalClipboard: true
+      dispatchKind: UiCommand.clipboardPasteLayers
     };
     this.dispatch(internalPaste);
-    releasePasteLock();
     return;
   }
   readSystemClipboardForPaste(this, this.applyClipboardImage.bind(this), fileLoaderRef)

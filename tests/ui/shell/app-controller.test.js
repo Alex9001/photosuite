@@ -16,6 +16,7 @@ let resolveCurrentDocFromOpenList;
 let buildCapFormatBlurbHtml;
 let createFileLoaderProcessRef;
 let resolveScrollGestureToolId;
+let UiCommand;
 let KeyboardHandler;
 let ToolId;
 let CHROME_LAYOUT_NORMAL;
@@ -39,6 +40,7 @@ before(async () => {
   } = await import("../../../src/ui/shell/app-controller.js"));
   ({ FileLoader } = await import("../../../src/ui/shell/file-loader.js"));
   ({ KeyboardHandler } = await import("../../../src/core/keyboard-handler.js"));
+  ({ UiCommand } = await import("../../../src/core/event-bus.js"));
   ({ ToolId } = await import("../../../src/document/model/tool-base.js"));
 });
 
@@ -110,6 +112,61 @@ describe("ui/shell/app-controller.js", () => {
     const ref = createFileLoaderProcessRef();
     assert.equal(ref.processLoadedBytes, FileLoader.processLoadedBytes);
     assert.equal(ref.qb, undefined);
+  });
+
+  // WebKitGTK gives the paste event no image data for a picture copied in
+  // another application, so on Linux a keyboard paste fell through to whatever
+  // the internal clipboard still held — the image pasted the time before.
+  // Edit > Paste asks the system clipboard first, which is why it was right and
+  // Ctrl+V was a step behind.
+  describe("onSystemPaste", () => {
+    function pasteController(appData) {
+      const dispatched = [];
+      const controller = Object.create(AppController.prototype);
+      controller.appData = appData;
+      controller.toolRegistry = { entriesById: {} };
+      controller.textInputTagNames = ["input", "textarea"];
+      controller._pasteInFlight = false;
+      controller.dispatch = (event) => dispatched.push(event);
+      controller.dispatched = dispatched;
+      return controller;
+    }
+
+    /** A paste event as WebKitGTK delivers it: no image on the transfer. */
+    const emptyPasteEvent = () => ({ target: { tagName: "BODY" }, clipboardData: { items: [] } });
+
+    it("asks the paste command to consult the system clipboard", () => {
+      const controller = pasteController({ clipboardPixelPayload: { rect: {} }, pathClipboard: null });
+      controller.onSystemPaste(emptyPasteEvent());
+
+      assert.equal(controller.dispatched.length, 1, "nothing was dispatched");
+      const data = controller.dispatched[0].data;
+      assert.equal(data.dispatchKind, UiCommand.clipboardPasteLayers);
+      assert.notEqual(
+        data.skipInternalClipboard,
+        true,
+        "skipping the system clipboard is what pasted the previous image",
+      );
+    });
+
+    // That handler takes the guard itself for the read it starts; held here it
+    // would see the paste as re-entrant and drop it.
+    it("releases the in-flight guard before handing the paste on", () => {
+      const controller = pasteController({ clipboardPixelPayload: { rect: {} }, pathClipboard: null });
+      let guardWhenDispatched = null;
+      controller.dispatch = (event) => {
+        guardWhenDispatched = controller._pasteInFlight;
+        controller.dispatched.push(event);
+      };
+      controller.onSystemPaste(emptyPasteEvent());
+      assert.equal(guardWhenDispatched, false, "the handler would refuse a paste it thinks is re-entrant");
+    });
+
+    it("still ignores a paste aimed at a text field", () => {
+      const controller = pasteController({ clipboardPixelPayload: { rect: {} } });
+      controller.onSystemPaste({ target: { tagName: "INPUT" }, clipboardData: { items: [] } });
+      assert.deepEqual(controller.dispatched, []);
+    });
   });
 
   // One wheel gesture, two meanings, and a preference that swaps them. The
