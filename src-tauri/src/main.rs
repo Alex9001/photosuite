@@ -5,17 +5,14 @@
 /// window that never appears. WebKit, Tauri and NVIDIA each consider it the
 /// others' bug, so it is ours to carry.
 ///
-/// Turning that renderer off drops WebKitGTK to a slower compositing path, so
-/// it is set only where the fault is: the proprietary driver creates one of the
-/// two files below, and nouveau, AMD and Intel do not. A value the user set
-/// always wins — someone on a driver where this is fixed sets it to 0 and keeps
-/// the accelerated path.
-///
-/// `__NV_DISABLE_EXPLICIT_SYNC` is the other workaround that circulates for
-/// this, and is deliberately not set here: it is a driver-wide switch that
-/// would turn explicit sync off for every GL client in the process, which on a
-/// current driver and compositor costs the tearing and stutter that protocol
-/// exists to prevent. Anyone who needs it can set it themselves.
+/// Turning off `WEBKIT_DISABLE_DMABUF_RENDERER` drops WebKitGTK to a slower
+/// compositing path, so it's set only where the fault is: the proprietary
+/// driver, detected via the files below (nouveau, AMD and Intel don't create
+/// them). `__NV_DISABLE_EXPLICIT_SYNC` is a driver-wide switch affecting every
+/// GL client in the process, not just PhotoSuite, so each variable is checked
+/// and set independently — a value already set, globally or by the user,
+/// always wins.
+
 ///
 /// This runs before `run()` builds the app, because WebKitGTK reads the
 /// variable when it spawns its web process. It is also before any thread
@@ -23,21 +20,24 @@
 #[cfg(target_os = "linux")]
 fn apply_nvidia_webkit_workaround() {
     const RENDERER_VAR: &str = "WEBKIT_DISABLE_DMABUF_RENDERER";
+    const NVIDIA_VAR: &str = "__NV_DISABLE_EXPLICIT_SYNC";
 
-    if std::env::var_os(RENDERER_VAR).is_some() {
-        return;
-    }
     let nvidia_driver_loaded = std::path::Path::new("/sys/module/nvidia/version").exists()
         || std::path::Path::new("/proc/driver/nvidia/version").exists();
     if !nvidia_driver_loaded {
         return;
     }
 
-    std::env::set_var(RENDERER_VAR, "1");
-    eprintln!(
-        "PhotoSuite: NVIDIA driver detected — setting {RENDERER_VAR}=1 to work around the \
-         WebKitGTK DMA-BUF crash. Set it yourself to override."
-    );
+    for var in [RENDERER_VAR, NVIDIA_VAR] {
+        if std::env::var_os(var).is_some() {
+            continue;
+        }
+        std::env::set_var(var, "1");
+        eprintln!(
+            "PhotoSuite: NVIDIA driver detected — setting {var}=1 to work \
+             around the webKitGTK DMA-BUF crash. Set it yourself to override."
+        );
+    }
 }
 
 fn main() {
