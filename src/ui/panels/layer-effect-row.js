@@ -344,8 +344,8 @@ function createEffectFieldWidget(effectClassId, fieldKey, widgetsByKey) {
   if (fieldKey == "lrMd" || fieldKey == "Md") {
     return new Dropdown("properties.blendMode", BlendModes.uiLabels, false, BlendModes.groupSizes)
   }
-  if (fieldKey == "Opct") return new RangeInput("properties.opacity", 0, 100, "%");
-  if (fieldKey == "iOpa") return new RangeInput("properties.fill", 0, 100, "%");
+  if (fieldKey == "Opct") return new RangeInput("properties.opacity", 0, 100, "%").limitToDeclaredRange();
+  if (fieldKey == "iOpa") return new RangeInput("properties.fill", 0, 100, "%").limitToDeclaredRange();
   if (fieldKey == "blIf") return new ModeDropdown();
   if (fieldKey == "ShdN") return new RangeInput("properties.jitter", 0, 100, "%");
   if (fieldKey == "lagl" || fieldKey == "Angl") return new DrawingCanvas("properties.angle");
@@ -370,7 +370,7 @@ function createEffectFieldWidget(effectClassId, fieldKey, widgetsByKey) {
     return new Dropdown("properties.mode", BlendModes.uiLabels, false, BlendModes.groupSizes)
   }
   if (fieldKey == "hglC" || fieldKey == "sdwC") return new ColorSampleWidget();
-  if (fieldKey == "hglO" || fieldKey == "sdwO") return new RangeInput("properties.opacity", 0, 100, "%");
+  if (fieldKey == "hglO" || fieldKey == "sdwO") return new RangeInput("properties.opacity", 0, 100, "%").limitToDeclaredRange();
   if (fieldKey == "Invr" || fieldKey == "InvT") return new Checkbox("adjustments.invert");
   if (fieldKey == "Sz") return new RangeInput("properties.size.title", 1, 200, "px");
   if (fieldKey == "Styl") return new Dropdown("properties.position", LayerEffectDefs.strokePositionOptions.names);

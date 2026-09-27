@@ -93,6 +93,18 @@ describe("ui/tool-options split", () => {
       }
     });
 
+    // Opacity and flow are percentages: the slider's 0-100 is the whole domain,
+    // not just the handy part of it. Typed past it, the value reaches the
+    // compositor as a multiplier above 1 and clips.
+    it("holds the percentage options to 0-100", () => {
+      const panel = optionBarWith(PaintBrushOption, {});
+      for (const widgetKey of ["Opct", "flow", "smth"]) {
+        const widget = panel.widgets[widgetKey];
+        assert.ok(widget, widgetKey + " is missing from the brush options");
+        assert.equal(widget.valuesLimitedToRange, true, widgetKey + " accepts values past 100%");
+      }
+    });
+
     // `applyAction` copies whatever it is handed onto the tool's options, so a
     // key the tool does not already have is one nothing reads.
     it("emits no option the tool does not already know", () => {

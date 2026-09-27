@@ -137,7 +137,7 @@ function AlignOption() {
   this.blendModeDropdown = new Dropdown("properties.blendMode", BlendModes.uiLabels, null, BlendModes.groupSizes);
   this.blendModeDropdown.on(EventType.widgetSelect, this.emitChange, this);
   this.body.appendChild(this.blendModeDropdown.el);
-  this.opacitySlider = new SliderDropdown("properties.opacity", 0, 100, "%");
+  this.opacitySlider = new SliderDropdown("properties.opacity", 0, 100, "%").limitToDeclaredRange();
   this.opacitySlider.parent = this;
   this.opacitySlider.on(EventType.widgetSelect, this.emitChange, this);
   this.body.appendChild(this.opacitySlider.el);
