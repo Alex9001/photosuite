@@ -1,0 +1,35 @@
+# Maintainer: eolix <patrik.zdi@gmail.com>
+#
+# Builds the Arch package (.pkg.tar.zst) from the payload of the .deb that
+# `tauri bundle -b deb` produces -- Tauri's bundler has no pacman target.
+#
+# The CI job copies the .deb here as `photosuite.deb` and rewrites pkgver from
+# src-tauri/tauri.conf.json before invoking makepkg, so the pkgver below is only
+# a placeholder for local runs.
+pkgname=photosuite
+pkgver=0.0.0
+pkgrel=1
+pkgdesc="PhotoSuite - Advanced Image Editor"
+arch=('x86_64')
+url="https://github.com/eolix/photosuite"
+license=('GPL-3.0-or-later')
+# The first eight are required by every Tauri v2 app; libcups matches the
+# `depends` already declared for the .deb in tauri.linux.conf.json.
+depends=('cairo' 'desktop-file-utils' 'gdk-pixbuf2' 'glib2' 'gtk3'
+         'hicolor-icon-theme' 'libsoup3' 'pango' 'webkit2gtk-4.1' 'libcups')
+# The binary is already linked and stripped as the .deb shipped it; letting
+# makepkg strip or split debug symbols again only risks breaking it.
+options=('!strip' '!debug' '!emptydirs')
+install="${pkgname}.install"
+source=('photosuite.deb')
+noextract=('photosuite.deb')
+sha256sums=('SKIP')
+
+package() {
+	# Unpack the deb's data member straight into $pkgdir. The member name is
+	# discovered rather than hardcoded so a change of payload compression in the
+	# Tauri bundler does not silently break the package.
+	local data
+	data=$(bsdtar -tf "${srcdir}/photosuite.deb" | grep '^data\.tar')
+	bsdtar -xOf "${srcdir}/photosuite.deb" "${data}" | bsdtar -xf - -C "${pkgdir}"
+}

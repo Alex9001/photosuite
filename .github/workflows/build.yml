@@ -1,9 +1,19 @@
 # PhotoSuite CI: lint the JS tree, then bundle installers on GitHub-hosted runners.
 #
 # Artifacts per run:
-#   PhotoSuite-macos    universal (arm64 + x86_64) .dmg
-#   PhotoSuite-windows  x64 NSIS .exe installer
-#   PhotoSuite-linux    x64 .deb and .rpm
+#   PhotoSuite-macos            universal (arm64 + x86_64) .dmg
+#   PhotoSuite-windows          x64 NSIS .exe installer
+#   PhotoSuite-linux-deb        x64 .deb
+#   PhotoSuite-linux-rpm        x64 .rpm
+#   PhotoSuite-linux-appimage   x64 .AppImage
+#   PhotoSuite-linux-flatpak    x64 single-file .flatpak bundle
+#   PhotoSuite-linux-pacman     x64 .pkg.tar.zst
+#
+# The Linux side is split in two: `build-linux` compiles the binary once and
+# `package-linux` fans out one runner per package format. The Rust build is by
+# far the expensive part, so compiling once and sharing the binary as a
+# short-lived artifact is what keeps the fan-out cheap -- five independent
+# `tauri build` runs would pay for the same compile five times over.
 #
 # Installers are only built for a `v*` tag push (or a manual workflow_dispatch run),
 # not on a plain push to main. A tag push additionally publishes those files to a
@@ -43,10 +53,10 @@ jobs:
       github.event.pull_request.head.repo.full_name != github.repository
     steps:
       # The suite imports modules that load vendor scripts from the submodules.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 25
           cache: npm
@@ -58,7 +68,12 @@ jobs:
 
   # Installers are built only for a release tag or a run started by hand.
   # A push to main (or any other branch) gets the checks above and stops there.
-  build:
+  #
+  # macOS and Windows bundle in one job each: their bundlers run on the same
+  # runner that compiled the binary and there is only one installer format per
+  # platform, so there is nothing to fan out. These run in parallel with
+  # build-linux and package-linux.
+  build-desktop:
     name: Build (${{ matrix.label }})
     needs: check-js
     if: >-
@@ -85,15 +100,6 @@ jobs:
             bundle_paths: |
               src-tauri/target/release/bundle/nsis/*.exe
 
-          - label: Linux x64
-            os: ubuntu-24.04
-            artifact: PhotoSuite-linux
-            rust_targets: ''
-            tauri_args: ''
-            bundle_paths: |
-              src-tauri/target/release/bundle/deb/*.deb
-              src-tauri/target/release/bundle/rpm/*.rpm
-
     # The `secrets` context cannot be read from a step-level `if`, so the guard
     # value is lifted to the job environment and the steps test `env.` instead.
     env:
@@ -103,26 +109,9 @@ jobs:
       # src/index.html script-loads UPNG, UZIP, pako, PDFI and friends straight
       # out of their submodule working trees, so a shallow checkout builds an app
       # whose vendor <script> tags all 404.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
-
-      - name: Install Linux bundling dependencies
-        if: runner.os == 'Linux'
-        run: |
-          set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install --no-install-recommends -y \
-            libwebkit2gtk-4.1-dev \
-            libayatana-appindicator3-dev \
-            librsvg2-dev \
-            libxdo-dev \
-            libssl-dev \
-            libcups2-dev \
-            build-essential \
-            file \
-            patchelf \
-            rpm
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -134,7 +123,7 @@ jobs:
           workspaces: src-tauri
           key: ${{ matrix.os }}
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 25
           cache: npm
@@ -201,23 +190,262 @@ jobs:
         run: npx tauri build ${{ matrix.tauri_args }}
 
       - name: Upload ${{ matrix.artifact }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.bundle_paths }}
           if-no-files-found: error
 
+  # Compiles the Linux binary once. Every package format in `package-linux` then
+  # bundles from this one binary instead of recompiling, which is what makes the
+  # fan-out below worth doing.
+  build-linux:
+    name: Build (Linux x64)
+    needs: check-js
+    if: >-
+      startsWith(github.ref, 'refs/tags/v') ||
+      github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    steps:
+      # src/index.html script-loads UPNG, UZIP, pako, PDFI and friends straight
+      # out of their submodule working trees, so a shallow checkout builds an app
+      # whose vendor <script> tags all 404.
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      # Compile-time dependencies only. The libraries the *bundlers* need are
+      # installed in package-linux instead.
+      - name: Install Linux build dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libxdo-dev \
+            libssl-dev \
+            libcups2-dev \
+            build-essential
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          # Unchanged from when this was one matrix leg, so the existing cache
+          # entry is still a hit.
+          key: ubuntu-24.04
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 25
+          cache: npm
+
+      - run: npm ci
+
+      # Restores the placeholder files that dangling vendor symlinks point at.
+      - name: Repair vendor symlinks
+        run: npm run vendor:fixlinks
+
+      # The frontend is embedded into the binary by tauri::generate_context!, so
+      # everything the bundlers need is in this one file.
+      - name: Tauri build (no bundle)
+        run: npx tauri build --no-bundle
+
+      - name: Upload linux-binary
+        uses: actions/upload-artifact@v7
+        with:
+          name: linux-binary
+          path: src-tauri/target/release/photosuite
+          if-no-files-found: error
+          # Purely an intermediate handoff to package-linux; nothing needs it
+          # once the run is over.
+          retention-days: 1
+
+  # One runner per Linux package format, all fed from the binary built above, so
+  # the Linux leg costs one compile plus the slowest single package rather than
+  # the sum of all five. fail-fast is off: a broken Flatpak runtime or AppImage
+  # tool download should not take the .deb and .rpm down with it.
+  package-linux:
+    name: Package (${{ matrix.label }})
+    needs: build-linux
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: Linux .deb
+            format: deb
+            bundles: deb
+            artifact: PhotoSuite-linux-deb
+            paths: src-tauri/target/release/bundle/deb/*.deb
+
+          - label: Linux .rpm
+            format: rpm
+            bundles: rpm
+            artifact: PhotoSuite-linux-rpm
+            paths: src-tauri/target/release/bundle/rpm/*.rpm
+
+          - label: Linux AppImage
+            format: appimage
+            bundles: appimage
+            artifact: PhotoSuite-linux-appimage
+            paths: src-tauri/target/release/bundle/appimage/*.AppImage
+
+          # Tauri's bundler has no flatpak or pacman target, so these two
+          # legs bundle a .deb and repackage its payload. Doing that here
+          # rather than depending on the .deb leg keeps all five independent.
+          - label: Linux Flatpak
+            format: flatpak
+            bundles: deb
+            artifact: PhotoSuite-linux-flatpak
+            paths: dist/flatpak/*.flatpak
+
+          - label: Linux .pkg.tar.zst
+            format: pacman
+            bundles: deb
+            artifact: PhotoSuite-linux-pacman
+            paths: dist/pacman/*.pkg.tar.zst
+
+    env:
+      # GitHub runners have no FUSE, so linuxdeploy and appimagetool have to
+      # unpack themselves instead of mounting.
+      APPIMAGE_EXTRACT_AND_RUN: 1
+
+    steps:
+      # Submodules are deliberately skipped: the frontend is already compiled
+      # into the binary, and the only files the bundlers read from the tree are
+      # src-tauri/ plus the LICENSE and THIRD-PARTY-NOTICES.md resources.
+      - uses: actions/checkout@v7
+
+      - name: Install Linux bundling dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+
+          # patchelf and file are used by the deb/AppImage bundlers; the runtime
+          # webkit libraries are what linuxdeploy copies into the AppImage.
+          packages=(
+            file
+            patchelf
+            libwebkit2gtk-4.1-0
+            libayatana-appindicator3-1
+            librsvg2-2
+            libxdo3
+          )
+          case "${{ matrix.format }}" in
+            rpm) packages+=(rpm) ;;
+            flatpak) packages+=(flatpak flatpak-builder) ;;
+          esac
+
+          sudo apt-get install --no-install-recommends -y "${packages[@]}"
+
+      # No compilation happens here, but the Tauri CLI reads `cargo metadata` to
+      # locate the target directory and the binary name, so cargo has to be on
+      # PATH. Installed explicitly rather than relying on the runner image.
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 25
+          cache: npm
+
+      # Only needed for the Tauri CLI itself, which does the bundling.
+      - run: npm ci
+
+      - name: Download linux-binary
+        uses: actions/download-artifact@v8
+        with:
+          name: linux-binary
+          path: src-tauri/target/release
+
+      # Artifact archives do not carry file modes, so the binary comes back
+      # without its executable bit.
+      - name: Restore the executable bit
+        run: chmod +x src-tauri/target/release/photosuite
+
+      # `tauri bundle` reuses the binary that `tauri build --no-bundle` left in
+      # the target directory rather than compiling again.
+      - name: Tauri bundle (${{ matrix.bundles }})
+        run: npx tauri bundle -b ${{ matrix.bundles }}
+
+      - name: Build Flatpak bundle
+        if: matrix.format == 'flatpak'
+        run: |
+          set -euo pipefail
+          version=$(node -p "require('./src-tauri/tauri.conf.json').version")
+
+          # The manifest refers to its .deb source by a fixed name, since
+          # flatpak-builder sources cannot be globbed.
+          cp src-tauri/target/release/bundle/deb/*.deb packaging/flatpak/photosuite.deb
+
+          flatpak --user remote-add --if-not-exists \
+            flathub https://flathub.org/repo/flathub.flatpakrepo
+          flatpak --user install -y flathub \
+            org.gnome.Platform//47 org.gnome.Sdk//47
+
+          # rofiles-fuse needs FUSE, which the runners do not provide.
+          flatpak-builder --user --disable-rofiles-fuse --force-clean \
+            --repo=flatpak-repo build-dir \
+            packaging/flatpak/app.photosuite.PhotoSuite.yml
+
+          mkdir -p dist/flatpak
+          flatpak build-bundle flatpak-repo \
+            "dist/flatpak/PhotoSuite_${version}_x86_64.flatpak" \
+            app.photosuite.PhotoSuite
+
+      - name: Build Arch package
+        if: matrix.format == 'pacman'
+        run: |
+          set -euo pipefail
+          version=$(node -p "require('./src-tauri/tauri.conf.json').version")
+
+          work="$RUNNER_TEMP/pacman"
+          mkdir -p dist/pacman "$work"
+          cp packaging/arch/PKGBUILD packaging/arch/photosuite.install "$work/"
+          cp src-tauri/target/release/bundle/deb/*.deb "$work/photosuite.deb"
+          sed -i "s/^pkgver=.*/pkgver=${version}/" "$work/PKGBUILD"
+
+          # makepkg exists only on Arch and refuses to run as root, so it runs
+          # in a container as an unprivileged user. --nodeps skips the runtime
+          # dependency check: none of the app's libraries are installed here and
+          # repackaging the .deb payload does not need them.
+          docker run --rm -v "$work:/pkg" archlinux:base-devel bash -c '
+            set -euo pipefail
+            useradd -m builder
+            cp -r /pkg /home/builder/build
+            chown -R builder:builder /home/builder/build
+            su builder -c "cd /home/builder/build && makepkg --nodeps --noconfirm"
+            cp /home/builder/build/*.pkg.tar.zst /pkg/
+          '
+
+          mv "$work"/*.pkg.tar.zst dist/pacman/
+
+      - name: Upload ${{ matrix.artifact }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.paths }}
+          if-no-files-found: error
+
   release:
     name: Draft release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: build
+    needs: [build-desktop, package-linux]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      # The pattern excludes the intermediate `linux-binary` artifact, which
+      # must not end up as a release asset.
+      - uses: actions/download-artifact@v8
         with:
           path: dist
+          pattern: PhotoSuite-*
           merge-multiple: true
 
       - name: Create or update draft release
