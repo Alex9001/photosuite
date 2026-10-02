@@ -1,12 +1,25 @@
 {
   "bundle": {
-    "targets": ["deb", "rpm"],
+    "targets": [
+      "appimage",
+      "deb",
+      "rpm"
+    ],
     "linux": {
       "deb": {
-        "depends": ["libcups2"]
+        "depends": [
+          "libcups2"
+        ]
       },
       "rpm": {
-        "depends": ["cups-libs"]
+        "depends": [
+          "cups-libs"
+        ]
+      },
+      "appimage": {
+        "files": {
+          "/usr/share/metainfo/app.photosuite.metainfo.xml": "../packaging/linux/app.photosuite.metainfo.xml"
+        }
       }
     }
   }

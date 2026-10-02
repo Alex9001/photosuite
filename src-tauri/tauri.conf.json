@@ -35,6 +35,8 @@
       "app"
     ],
     "category": "Photography",
+    "homepage": "https://github.com/eolix/photosuite",
+    "shortDescription": "Layered image editor with native PSD and PSB support",
     "resources": {
       "../LICENSE": "LICENSE",
       "../THIRD-PARTY-NOTICES.md": "THIRD-PARTY-NOTICES.md"
@@ -52,7 +54,7 @@
       "exceptionDomain": null,
       "frameworks": [],
       "providerShortName": null,
-      "signingIdentity": "Developer ID Application: Patrik Ohlson (W3H3H7D9ST)",
+      "signingIdentity": null,
       "dmg": {
         "windowSize": {
           "width": 660,

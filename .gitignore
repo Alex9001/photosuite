@@ -18,3 +18,8 @@ src-tauri/gen/
 
 # pdf.js source cloned on demand by vendor/js/pdfjs-codecs/build.sh
 src/vendor/pdfjs/
+
+# Release candidates and local packaging verification
+dist/
+__pycache__/
+evidence/

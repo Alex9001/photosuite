@@ -53,11 +53,15 @@ Pre-built binary packages are available on the **[Releases](https://github.com/e
 
 | Platform | Package Format | Architecture |
 |:---|:---|:---|
-| **macOS** | Universal `.dmg` | Apple Silicon (arm64) & Intel (x86_64) |
-| **Linux** | `.deb`, `.rpm` | x86_64 |
-| **Windows** | NSIS installer (`.exe`) | x64 |
+| **macOS** | `.dmg`, application `.zip` | Separate Apple Silicon (arm64) & Intel (x86_64) |
+| **Linux** | `.AppImage`, portable `.tar.gz`, `.deb`, `.rpm` | x86_64 |
+| **Windows** | NSIS installer (`.exe`), portable `.zip` | x64 |
 
 ---
+
+See [native packaging and release verification](docs/PACKAGING.md) for candidate builds,
+signing requirements, and AppImageHub submission. These formats become public
+downloads when a maintainer publishes a release built with this workflow.
 
 ## Screenshots
 

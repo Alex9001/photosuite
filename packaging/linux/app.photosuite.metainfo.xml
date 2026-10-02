@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>app.photosuite</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>PhotoSuite</name>
+  <summary>Layered image editor with native PSD and PSB support</summary>
+  <developer_name>eolix</developer_name>
+  <description>
+    <p>PhotoSuite is an offline desktop image editor with layers, masks, drawing tools,
+    filters and native Photoshop document support. It reads and writes PSD and PSB
+    documents alongside common bitmap and vector formats.</p>
+  </description>
+  <launchable type="desktop-id">PhotoSuite.desktop</launchable>
+  <url type="homepage">https://github.com/eolix/photosuite</url>
+  <url type="bugtracker">https://github.com/eolix/photosuite/issues</url>
+  <categories><category>Graphics</category><category>Photography</category></categories>
+  <content_rating type="oars-1.1"/>
+</component>

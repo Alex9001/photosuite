@@ -1,17 +1,4 @@
-# PhotoSuite CI: lint the JS tree, then bundle installers on GitHub-hosted runners.
-#
-# Artifacts per run:
-#   PhotoSuite-macos    universal (arm64 + x86_64) .dmg
-#   PhotoSuite-windows  x64 NSIS .exe installer
-#   PhotoSuite-linux    x64 .deb and .rpm
-#
-# Installers are only built for a `v*` tag push (or a manual workflow_dispatch run),
-# not on a plain push to main. A tag push additionally publishes those files to a
-# draft GitHub Release.
-#
-# macOS signing and notarization are opt-in: without the Apple secrets the job
-# still builds and produces an unsigned .dmg. See "Apple secrets" below.
-
+# Build and verify all native candidates before creating a draft release.
 name: PhotoSuite
 
 on:
@@ -55,44 +42,35 @@ jobs:
       - run: npm run vendor:fixlinks
       - run: npm run verify
       - run: npm test
+      - run: python3 -m unittest discover -s tests/packaging -p 'test_*.py'
 
-  # Installers are built only for a release tag or a run started by hand.
-  # A push to main (or any other branch) gets the checks above and stops there.
   build:
     name: Build (${{ matrix.label }})
     needs: check-js
     if: >-
-      startsWith(github.ref, 'refs/tags/v') ||
-      github.event_name == 'workflow_dispatch'
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - label: macOS universal
-            os: macos-latest
-            artifact: PhotoSuite-macos
-            rust_targets: aarch64-apple-darwin,x86_64-apple-darwin
-            tauri_args: --target universal-apple-darwin
-            bundle_paths: |
-              src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
-
+          - label: macOS Intel
+            os: macos-15-intel
+            platform: macos-x86_64
+            rust_target: x86_64-apple-darwin
+          - label: macOS Apple Silicon
+            os: macos-14
+            platform: macos-arm64
+            rust_target: aarch64-apple-darwin
           - label: Windows x64
-            os: windows-latest
-            artifact: PhotoSuite-windows
-            rust_targets: ''
-            tauri_args: ''
-            bundle_paths: |
-              src-tauri/target/release/bundle/nsis/*.exe
-
+            os: windows-2025
+            platform: windows-x64
+            rust_target: x86_64-pc-windows-msvc
           - label: Linux x64
-            os: ubuntu-24.04
-            artifact: PhotoSuite-linux
-            rust_targets: ''
-            tauri_args: ''
-            bundle_paths: |
-              src-tauri/target/release/bundle/deb/*.deb
-              src-tauri/target/release/bundle/rpm/*.rpm
+            os: ubuntu-22.04
+            platform: linux-x86_64
+            rust_target: x86_64-unknown-linux-gnu
 
     # The `secrets` context cannot be read from a step-level `if`, so the guard
     # value is lifted to the job environment and the steps test `env.` instead.
@@ -122,17 +100,17 @@ jobs:
             build-essential \
             file \
             patchelf \
-            rpm
+            rpm zsync xvfb xdotool desktop-file-utils appstream
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.rust_targets }}
+          targets: ${{ matrix.rust_target }}
 
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
-          key: ${{ matrix.os }}
+          key: ${{ matrix.rust_target }}
 
       - uses: actions/setup-node@v4
         with:
@@ -155,7 +133,7 @@ jobs:
       #   APPLE_API_KEY_ID            that key's ID
       #   APPLE_API_ISSUER            the issuer UUID
       - name: Set up Apple code signing
-        if: runner.os == 'macOS' && env.APPLE_CERTIFICATE != ''
+        if: runner.os == 'macOS' && github.event_name != 'pull_request' && startsWith(github.ref, 'refs/tags/v') && env.APPLE_CERTIFICATE != ''
         env:
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
@@ -195,54 +173,184 @@ jobs:
             } >> "$GITHUB_ENV"
           fi
 
-      # `--target` is a tauri flag; putting it after `--` would hand it to cargo
-      # and leave the bundler looking in the wrong target directory.
-      - name: Tauri build
-        run: npx tauri build ${{ matrix.tauri_args }}
+      - name: Prepare AppImage update channel
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          owner="${GITHUB_REPOSITORY%/*}"
+          repository="${GITHUB_REPOSITORY#*/}"
+          echo "LDAI_UPDATE_INFORMATION=gh-releases-zsync|$owner|$repository|latest|PhotoSuite-*-linux-x86_64.AppImage.zsync" >> "$GITHUB_ENV"
 
-      - name: Upload ${{ matrix.artifact }}
+      - name: Use ad-hoc signing for unsigned macOS candidates
+        if: runner.os == 'macOS' && env.APPLE_SIGNING_IDENTITY == ''
+        shell: bash
+        run: echo 'APPLE_SIGNING_IDENTITY=-' >> "$GITHUB_ENV"
+
+      - name: Tauri build (locked dependencies)
+        run: npx tauri build --target ${{ matrix.rust_target }} -- --locked
+
+      - name: Stage packages and source receipt
+        run: python scripts/package-release.py stage ${{ matrix.platform }} dist
+
+      - name: Verify Linux AppImage
+        if: runner.os == 'Linux'
+        run: bash scripts/verify-appimage.sh dist
+
+      - name: Verify Windows portable application
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/verify-windows.ps1
+
+      - name: Verify macOS application architecture
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          binary="src-tauri/target/${{ matrix.rust_target }}/release/bundle/macos/PhotoSuite.app/Contents/MacOS/photosuite"
+          file "$binary"
+          if [[ '${{ matrix.platform }}' == 'macos-arm64' ]]; then
+            lipo -verify_arch arm64 "$binary"
+          else
+            lipo -verify_arch x86_64 "$binary"
+          fi
+          codesign --verify --deep --strict "$(dirname "$(dirname "$binary")")/.."
+          hdiutil verify dist/*.dmg
+          unzip -t dist/*.zip
+          python3 scripts/verify-macos.py
+
+      - name: Retain native startup evidence
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact }}
-          path: ${{ matrix.bundle_paths }}
+          name: startup-evidence-${{ matrix.platform }}
+          path: evidence/
+          if-no-files-found: ignore
+
+      - name: Upload PhotoSuite-${{ matrix.platform }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: PhotoSuite-${{ matrix.platform }}
+          path: dist/*
+          if-no-files-found: error
+
+  catalog:
+    needs: build
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    env:
+      DISPLAY: ':99'
+      IS_PULLREQUEST: 'true'
+      STRICT: 'true'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/download-artifact@v4
+        with:
+          name: PhotoSuite-linux-x86_64
+          path: candidates
+      - name: Record candidate identity
+        run: sha256sum candidates/*.AppImage > candidate-sha256.txt
+      - name: Check out pinned upstream catalog worker
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: AppImage/appimage.github.io
+          ref: f1249e9e1ff840dd53a6218aec3451ebd6bf476d
+          path: catalog
+      - name: Install upstream worker dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y sudo imagemagick libasound2-dev pulseaudio-utils alsa-utils alsa-oss libjack0 desktop-file-utils xmlstarlet xsel xterm xvfb icewm x11-utils x11-apps netpbm xdotool libgl1-mesa-dri libgl1-mesa-dev mesa-utils libosmesa6 libsdl1.2-dev libsdl2-2.0-0 fonts-wqy-microhei libfile-mimeinfo-perl tesseract-ocr tesseract-ocr-eng tesseract-ocr-chi-sim tesseract-ocr-ara tesseract-ocr-rus tesseract-ocr-ell libfuse2 stalonetray
+          cd catalog
+          bash code/fetch-deps.sh
+          cp -a deps/. .
+          sudo bash code/prep-dummy-soundcard.sh
+          sudo gem install dupervisor -v 1.0.5
+          sudo npm install -g asar
+      - name: Run unmodified catalog worker against candidate bytes
+        run: |
+          set -euo pipefail
+          VERSION=$(python3 -c 'import json; print(json.load(open("src-tauri/tauri.conf.json"))["version"])')
+          python3 -m http.server 8765 --bind 127.0.0.1 --directory candidates > server.log 2>&1 &
+          Xvfb :99 -screen 0 800x600x24 > xvfb.log 2>&1 &
+          mkdir -p "$HOME/.icewm"
+          echo 'ShowTaskBar = 0' > "$HOME/.icewm/preferences"
+          sleep 2
+          cd catalog
+          echo "http://127.0.0.1:8765/PhotoSuite-$VERSION-linux-x86_64.AppImage" > data/PhotoSuite
+          timeout --kill-after=30 600 bash -e code/worker.sh "$PWD/data/PhotoSuite" 2>&1 | tee ../catalog.log
+          cmp BeingTested.AppImage "../candidates/PhotoSuite-$VERSION-linux-x86_64.AppImage"
+      - if: always()
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08
+        with:
+          name: appimage-catalog-evidence
+          path: |
+            catalog.log
+            candidate-sha256.txt
+            catalog/database/PhotoSuite/
+            catalog/failure-screens/
+            server.log
+            xvfb.log
+
+  verify-release:
+    name: Verify complete release inventory
+    needs: build
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: PhotoSuite-*
+          path: dist
+          merge-multiple: true
+      - name: Check every package and exact source revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(python3 -c 'import json; print(json.load(open("src-tauri/tauri.conf.json"))["version"])')
+          if [[ "$GITHUB_REF" == refs/tags/* && "$GITHUB_REF_NAME" != "v$version" ]]; then
+            echo "Tag does not match the application version" >&2
+            exit 1
+          fi
+          python3 scripts/package-release.py verify dist --source "$GITHUB_SHA" --version "$version"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: verified-release
+          path: dist/*
           if-no-files-found: error
 
   release:
     name: Draft release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: build
+    needs: [verify-release, catalog]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
+          name: verified-release
           path: dist
-          merge-multiple: true
-
       - name: Create or update draft release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-
-          # Flatten nested subdirectories created by actions/download-artifact (e.g. deb/, rpm/)
-          find dist -mindepth 2 -type f -exec mv {} dist/ \;
-          find dist -mindepth 1 -type d -empty -delete
-
-          # If the release was already created (e.g. on retry or prior partial run), upload assets directly
-          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "Release $GITHUB_REF_NAME already exists, uploading assets..."
-            gh release upload "$GITHUB_REF_NAME" \
-              --repo "$GITHUB_REPOSITORY" \
-              --clobber \
-              dist/*
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json isDraft,assets > release.json; then
+            python3 -c 'import json; assert json.load(open("release.json"))["isDraft"], "Refusing to modify a published release"'
+            python3 - <<'PYCODE'
+          import json
+          from pathlib import Path
+          existing = {asset['name'] for asset in json.load(open('release.json'))['assets']}
+          expected = {path.name for path in Path('dist').iterdir()}
+          assert existing <= expected, f'Draft has stale assets; review them before retrying: {existing - expected}'
+          PYCODE
+            gh release upload "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --clobber dist/*
           else
-            echo "Creating draft release $GITHUB_REF_NAME..."
-            gh release create "$GITHUB_REF_NAME" \
-              --repo "$GITHUB_REPOSITORY" \
-              --title "PhotoSuite $GITHUB_REF_NAME" \
-              --generate-notes \
-              --draft \
-              dist/*
+            gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" --verify-tag --title "PhotoSuite $GITHUB_REF_NAME" \
+              --generate-notes --draft dist/*
           fi
+          # Validate the uploaded bytes, not merely the local staging directory.
+          gh release download "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --dir downloaded
+          version=$(python3 -c 'import json; print(json.load(open("src-tauri/tauri.conf.json"))["version"])')
+          python3 scripts/package-release.py verify downloaded --source "$GITHUB_SHA" --version "$version"
