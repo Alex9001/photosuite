@@ -209,9 +209,9 @@ jobs:
           binary="src-tauri/target/${{ matrix.rust_target }}/release/bundle/macos/PhotoSuite.app/Contents/MacOS/photosuite"
           file "$binary"
           if [[ '${{ matrix.platform }}' == 'macos-arm64' ]]; then
-            lipo -verify_arch arm64 "$binary"
+            lipo "$binary" -verify_arch arm64
           else
-            lipo -verify_arch x86_64 "$binary"
+            lipo "$binary" -verify_arch x86_64
           fi
           codesign --verify --deep --strict "$(dirname "$(dirname "$binary")")/.."
           hdiutil verify dist/*.dmg

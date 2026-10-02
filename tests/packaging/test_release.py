@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+import xml.etree.ElementTree as ET
 
 spec = importlib.util.spec_from_file_location('release', Path(__file__).resolve().parents[2] / 'scripts/package-release.py')
 release = importlib.util.module_from_spec(spec)
@@ -92,6 +93,20 @@ class ReleaseInventory(unittest.TestCase):
         path.write_text(json.dumps(receipt))
         with self.assertRaisesRegex(ValueError, 'Wrong package inventory'):
             self.verify()
+
+
+class AppImageMetadata(unittest.TestCase):
+    def test_metainfo_identity_and_bundle_mapping(self):
+        root = Path(__file__).resolve().parents[2]
+        config = json.loads((root / 'src-tauri/tauri.linux.conf.json').read_text())
+        files = config['bundle']['linux']['appimage']['files']
+        destination, source = next(iter(files.items()))
+        metadata = ET.parse(root / 'src-tauri' / source).getroot()
+        identity = metadata.findtext('id')
+        self.assertGreaterEqual(len(identity.split('.')), 3)
+        self.assertEqual(Path(destination).name, f'{identity}.metainfo.xml')
+        self.assertEqual(metadata.findtext('launchable'), 'PhotoSuite.desktop')
+        self.assertIn('appimage', config['bundle']['targets'])
 
 
 if __name__ == '__main__':

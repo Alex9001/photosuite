@@ -27,7 +27,7 @@ PY
   cd "$work"
   env -u APPIMAGE_EXTRACT_AND_RUN "$image" --appimage-extract >/dev/null
   desktop-file-validate squashfs-root/PhotoSuite.desktop
-  appstreamcli validate --no-net squashfs-root/usr/share/metainfo/app.photosuite.metainfo.xml
+  appstreamcli validate --no-net squashfs-root/usr/share/metainfo/app.photosuite.PhotoSuite.metainfo.xml
   test -s squashfs-root/usr/lib/PhotoSuite/LICENSE
   test -s squashfs-root/usr/lib/PhotoSuite/THIRD-PARTY-NOTICES.md
   zsync -i "$image" -o reconstructed.AppImage "$image.zsync"

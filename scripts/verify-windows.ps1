@@ -31,6 +31,20 @@ try {
     }
     if (-not $visible) { throw 'Portable app did not show a window within 30 seconds' }
 } finally {
-    if (-not $process.HasExited) { Stop-Process -Id $process.Id }
-    Remove-Item -LiteralPath $destination -Recurse -Force
+    # Windows can retain the executable handle briefly after termination. Cleanup
+    # must not mask a more useful startup exception or fail a successful smoke.
+    try {
+        $process.Refresh()
+        if (-not $process.HasExited) { Stop-Process -Id $process.Id -ErrorAction Stop }
+        if (-not $process.WaitForExit(10000)) { Write-Warning 'Process cleanup timed out' }
+    } catch { Write-Warning "Process cleanup: $_" }
+    for ($attempt = 0; $attempt -lt 5; $attempt++) {
+        try {
+            Remove-Item -LiteralPath $destination -Recurse -Force -ErrorAction Stop
+            break
+        } catch {
+            if ($attempt -eq 4) { Write-Warning "Temporary-file cleanup: $_" }
+            else { Start-Sleep -Seconds 1 }
+        }
+    }
 }
