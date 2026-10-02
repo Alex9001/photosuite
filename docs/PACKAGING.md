@@ -13,7 +13,9 @@ adapted to Tauri rather than copying its Qt deployment tooling.
 The Linux archive contains the self-contained AppImage and notices. The Windows
 archive contains the executable and its external license resources; WebView2 must
 be installed (the NSIS installer handles the normal WebView2 installation flow).
-Mac ZIPs preserve application metadata with `ditto`. macOS builds are separate
+Mac ZIPs preserve application metadata with `ditto`. CI launches the extracted
+Mac ZIP through LaunchServices and waits for the frontend-specific editor menus
+and the in-window Transform controls toolbar to appear using screenshot OCR, so a running but blank webview cannot pass. macOS builds are separate
 native architectures, replacing the previous universal DMG.
 
 ## Build and verify

@@ -111,6 +111,7 @@ jobs:
         with:
           workspaces: src-tauri
           key: ${{ matrix.rust_target }}
+          cache-on-failure: true
 
       - uses: actions/setup-node@v4
         with:
