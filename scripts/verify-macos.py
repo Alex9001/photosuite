@@ -17,16 +17,20 @@ def pids_for(binary):
 
 def editor_visible(text):
     words = set(re.findall(r'[a-z]+', text.lower()))
-    menus = {'image', 'layer', 'select', 'filter'} <= words
+    menus = {'image', 'select', 'filter'} <= words
     toolbar = {'transform', 'controls'} <= words
-    return menus and toolbar
+    # A fresh app normally opens its home screen, which intentionally has no
+    # editor toolbar. Require its actual in-window title and action buttons.
+    title = re.search(r'photosuite\s+\d+\.\d+\.\d+', text, re.IGNORECASE)
+    home = title is not None and {'new', 'open', 'from'} <= words
+    return menus and (toolbar or home)
 
 
 def wait_for_editor(launcher, binary, ocr, evidence):
     # Tauri first shows a default white webview and File/Edit/View menus. The
     # frontend installs Image/Layer/Select/Filter just before mounting its DOM.
-    # Also require the in-window Transform controls toolbar, because native
-    # menus alone do not prove that the webview rendered.
+    # Also require in-window home actions or the Transform controls toolbar,
+    # because native menus alone do not prove that the webview rendered.
     screenshot = evidence / 'macos-startup.png'
     deadline = time.monotonic() + 60
     while time.monotonic() < deadline:
@@ -38,7 +42,7 @@ def wait_for_editor(launcher, binary, ocr, evidence):
         if editor_visible(text):
             return
         time.sleep(2)
-    raise RuntimeError('Editor menus and toolbar did not render within 60 seconds; see screenshot and OCR evidence')
+    raise RuntimeError('Home/editor UI did not render within 60 seconds; see screenshot and OCR evidence')
 
 
 def main():

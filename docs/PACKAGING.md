@@ -15,7 +15,8 @@ archive contains the executable and its external license resources; WebView2 mus
 be installed (the NSIS installer handles the normal WebView2 installation flow).
 Mac ZIPs preserve application metadata with `ditto`. CI launches the extracted
 Mac ZIP through LaunchServices and waits for the frontend-specific editor menus
-and the in-window Transform controls toolbar to appear using screenshot OCR, so a running but blank webview cannot pass. macOS builds are separate
+and either the home-screen title/New/Open actions or the editor toolbar to
+appear using screenshot OCR, so a running but blank webview cannot pass. macOS builds are separate
 native architectures, replacing the previous universal DMG.
 
 ## Build and verify
