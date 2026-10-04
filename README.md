@@ -179,7 +179,7 @@ npm run verify     # Verify imports, cyclic dependencies, static bindings, and b
 npm run lint       # Run ESLint across src/
 ```
 
-Automated cross-platform builds (macOS universal, Linux deb/rpm, Windows x64) are run on every release tag via [GitHub Actions](.github/workflows/build.yml).
+Automated builds produce Linux x86_64 AppImage/DEB/RPM packages, Windows x64 installers, separate Intel and Apple Silicon macOS packages, and portable archives via [GitHub Actions](.github/workflows/build.yml). These builds run on branch pushes, external pull requests, release tags, and manual runs.
 
 ---
 
