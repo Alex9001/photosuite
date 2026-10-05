@@ -466,6 +466,24 @@ jobs:
       - name: Tauri bundle (${{ matrix.bundles }})
         run: npx tauri bundle -b ${{ matrix.bundles }}
 
+      - name: Locate or generate AppImage zsync file
+        if: matrix.format == 'appimage'
+        run: |
+          set -euo pipefail
+          bundle_dir="src-tauri/target/release/bundle/appimage"
+          image=$(ls "$bundle_dir"/*.AppImage)
+          image_name=$(basename "$image")
+          if [ ! -f "$bundle_dir/$image_name.zsync" ]; then
+            found=$(find . -name "$image_name.zsync" -not -path "$bundle_dir/*" | head -n 1 || true)
+            if [ -n "$found" ] && [ -f "$found" ]; then
+              echo "Moving $found to $bundle_dir/$image_name.zsync"
+              mv "$found" "$bundle_dir/$image_name.zsync"
+            else
+              echo "Generating $image_name.zsync with zsyncmake"
+              (cd "$bundle_dir" && zsyncmake -u "$image_name" -o "$image_name.zsync" "$image_name")
+            fi
+          fi
+
       - name: Verify AppImage
         if: matrix.format == 'appimage'
         run: bash scripts/verify-appimage.sh src-tauri/target/release/bundle/appimage
