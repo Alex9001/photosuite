@@ -558,8 +558,12 @@
     "preferences": "Preferensi",
     "unitOfMeasure": "Satuan",
     "length": "Panjang",
-    "gridType": "Jenis kisi",
-    "isometric": "Isometrik",
+    "gridStyle": {
+      "lines": "Garis",
+      "dashedLines": "Garis putus-putus",
+      "dots": "Titik"
+    },
+    "gridSubdivisions": "Subdivisi",
     "gridGap": "Jarak kisi",
     "rulerUnits": "Satuan penggaris",
     "gpuAcceleration": "Akselerasi GPU",

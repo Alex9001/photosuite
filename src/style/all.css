@@ -836,6 +836,20 @@ body.photosuite-hide-html-menu .topbar {
 	color: var(--text-muted);
 }
 
+/* A named colour: the label, the swatch showing the colour, then its name. The
+   sample chip hangs below its line elsewhere, to sit on a label's baseline;
+   here it is a flex item, so it is centred on the row instead. */
+.namedcolour > .flabel {
+	flex: 0 0 auto;
+}
+
+.namedcolour > .colorsample {
+	width: 1.7em;
+	height: 1.5em;
+	margin-bottom: 0;
+	flex: 0 0 auto;
+}
+
 /* The confirm column stays at the top, whatever the pane's height. */
 .window.preferences .body.flexrow > .dialog-actions {
 	align-self: flex-start;

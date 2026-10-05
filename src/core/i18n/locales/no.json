@@ -558,8 +558,12 @@
     "preferences": "Innstillinger",
     "unitOfMeasure": "Enheter",
     "length": "Lengde",
-    "gridType": "Rutenetttype",
-    "isometric": "Isometrisk",
+    "gridStyle": {
+      "lines": "Linjer",
+      "dashedLines": "Stiplede linjer",
+      "dots": "Prikker"
+    },
+    "gridSubdivisions": "Underinndelinger",
     "gridGap": "Linjeavstand i rutenett",
     "rulerUnits": "Linjalenheter",
     "gpuAcceleration": "GPU-akselerasjon",

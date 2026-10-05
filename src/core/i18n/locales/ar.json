@@ -558,8 +558,12 @@
     "preferences": "التفضيلات",
     "unitOfMeasure": "وحدات",
     "length": "الطول",
-    "gridType": "نوع الشبكة",
-    "isometric": "متساوي القياس",
+    "gridStyle": {
+      "lines": "خطوط",
+      "dashedLines": "خطوط متقطعة",
+      "dots": "نقاط"
+    },
+    "gridSubdivisions": "تقسيمات فرعية",
     "gridGap": "فراغ الشبكة",
     "rulerUnits": "وحدات المسطرة",
     "gpuAcceleration": "تسريع وحدة معالجة الرسومات",

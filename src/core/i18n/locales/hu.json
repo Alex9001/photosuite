@@ -558,8 +558,12 @@
     "preferences": "Előnyben részesített",
     "unitOfMeasure": "Mértékegységek",
     "length": "Hossz",
-    "gridType": "Rács Típus",
-    "isometric": "Izometrikus",
+    "gridStyle": {
+      "lines": "Vonalak",
+      "dashedLines": "Szaggatott vonalak",
+      "dots": "Pontok"
+    },
+    "gridSubdivisions": "Alosztások",
     "gridGap": "Rácstérköz",
     "rulerUnits": "Vonalzó mértékegysége",
     "gpuAcceleration": "GPU-gyorsítás",

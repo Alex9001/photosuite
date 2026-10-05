@@ -558,8 +558,12 @@
     "preferences": "Προτιμήσεις",
     "unitOfMeasure": "Μονάδες",
     "length": "Μήκος",
-    "gridType": "Τύπος πλέγματος",
-    "isometric": "Ισομετρική",
+    "gridStyle": {
+      "lines": "Γραμμές",
+      "dashedLines": "Διακεκομμένες γραμμές",
+      "dots": "Κουκκίδες"
+    },
+    "gridSubdivisions": "Υποδιαιρέσεις",
     "gridGap": "Απόσταση πλέγματος",
     "rulerUnits": "Μονάδες χάρακα",
     "gpuAcceleration": "Επιτάχυνση GPU",

@@ -558,8 +558,12 @@
     "preferences": "Преференции",
     "unitOfMeasure": "Единици",
     "length": "Дължина",
-    "gridType": "Тип мрежа",
-    "isometric": "Изометрични",
+    "gridStyle": {
+      "lines": "Линии",
+      "dashedLines": "Прекъснати линии",
+      "dots": "Точки"
+    },
+    "gridSubdivisions": "Подразделения",
     "gridGap": "Размер на мрежа",
     "rulerUnits": "Единици на линийката",
     "gpuAcceleration": "GPU ускорение",

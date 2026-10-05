@@ -558,8 +558,12 @@
     "preferences": "Savybės",
     "unitOfMeasure": "Vienetai",
     "length": "Ilgis",
-    "gridType": "Tinklelio tipas",
-    "isometric": "Izometriškai",
+    "gridStyle": {
+      "lines": "Linijos",
+      "dashedLines": "Brūkšninės linijos",
+      "dots": "Taškai"
+    },
+    "gridSubdivisions": "Padalos",
     "gridGap": "Tinklelio tarpai",
     "rulerUnits": "Liniuotės vienetai",
     "gpuAcceleration": "GPU spartinimas",

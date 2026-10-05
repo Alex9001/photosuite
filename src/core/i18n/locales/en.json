@@ -601,8 +601,12 @@
     },
     "unitOfMeasure": "Units",
     "length": "Length",
-    "gridType": "Grid Type",
-    "isometric": "Isometric",
+    "gridStyle": {
+      "lines": "Lines",
+      "dashedLines": "Dashed Lines",
+      "dots": "Dots"
+    },
+    "gridSubdivisions": "Subdivisions",
     "gridGap": "Grid Gap",
     "rulerUnits": "Ruler Units",
     "gpuAcceleration": "GPU acceleration",

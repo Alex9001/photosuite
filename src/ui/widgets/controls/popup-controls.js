@@ -37,6 +37,18 @@ const BLEND_IF_VALUES_PER_MODE = 8;
 const BLEND_IF_CURRENT_LAYER_SECTION = 1;
 const WARP_PREVIEW_ICON_INSET = 0.3;
 
+/**
+ * Icon source naming a line style rather than an image: everything after it is
+ * a `setLineDash` pattern, so `"line:"` is a solid rule and `"line:4,3"` a
+ * dashed one. See {@link drawLineStyleIcon}.
+ */
+const LINE_STYLE_ICON_PREFIX = "line:";
+
+/** The icon source that draws `dashPattern`, for an {@link IconRenderer} item. */
+function lineStyleIconSource(dashPattern) {
+  return LINE_STYLE_ICON_PREFIX + dashPattern.join(",");
+}
+
 // --- Pure helpers (exported for tests) -----------------------------------------
 
 function accumulateGroupBreakPositions(groupBreaks) {
@@ -554,6 +566,12 @@ function buildIconMenuItemMarkup(iconSource, scratchCanvas, iconSizePx) {
   const scratchCtx = scratchCanvas.getContext("2d"),
     halfSize = iconSizePx >>> 1;
   scratchCanvas.width = scratchCanvas.height = iconSizePx;
+  if (iconSource.startsWith(LINE_STYLE_ICON_PREFIX)) {
+    drawLineStyleIcon(scratchCtx, iconSource.substring(LINE_STYLE_ICON_PREFIX.length), iconSizePx, halfSize);
+    // Drawn black on nothing, like the single-colour icons that ship as files,
+    // so the theme inverts it onto whatever surface it lands on.
+    return "<img src=\"" + scratchCanvas.toDataURL() + "\" class=\"autoscale gsicon\" />";
+  }
   if (iconSource == "checker") {
     scratchCtx.fillStyle = "white";
     scratchCtx.fillRect(0, 0, iconSizePx, iconSizePx);
@@ -568,6 +586,25 @@ function buildIconMenuItemMarkup(iconSource, scratchCanvas, iconSizePx) {
     return "<img src=\"" + scratchCanvas.toDataURL() + "\" />";
   }
   return "<img src=\"" + iconSource + "\" class=\"autoscale gsicon\" />";
+}
+
+/**
+ * Draw a rule across the icon in the dash pattern `dashSpec` names — a
+ * comma-separated `setLineDash` pattern, empty for an unbroken line.
+ *
+ * It is the line itself rather than a word for it: "Dashed Lines" and "Dots"
+ * are the kind of choice a picture settles faster than a name does.
+ */
+function drawLineStyleIcon(scratchCtx, dashSpec, iconSizePx, halfSize) {
+  const dashPattern = dashSpec == "" ? [] : dashSpec.split(",").map(Number);
+  scratchCtx.clearRect(0, 0, iconSizePx, iconSizePx);
+  scratchCtx.strokeStyle = "#000000";
+  scratchCtx.lineWidth = 1;
+  scratchCtx.setLineDash(dashPattern);
+  scratchCtx.beginPath();
+  scratchCtx.moveTo(0, halfSize + .5);
+  scratchCtx.lineTo(iconSizePx, halfSize + .5);
+  scratchCtx.stroke();
 }
 
 // --- Dropdown ------------------------------------------------------------------
@@ -1289,6 +1326,7 @@ export {
   adjustPresetActionIndex,
   computeBlendIfSectionOffset,
   normalizeSwatchPickColor,
+  lineStyleIconSource,
   PopupButton,
   ModeDropdown,
   ButtonMenu,

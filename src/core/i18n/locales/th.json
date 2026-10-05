@@ -558,8 +558,12 @@
     "preferences": "การตั้งค่า",
     "unitOfMeasure": "หน่วย",
     "length": "ความยาว",
-    "gridType": "ประเภทตาราง",
-    "isometric": "ไอโซเมตริก",
+    "gridStyle": {
+      "lines": "เส้นทึบ",
+      "dashedLines": "เส้นประ",
+      "dots": "จุด"
+    },
+    "gridSubdivisions": "การแบ่งย่อย",
     "gridGap": "ช่องว่างกริด",
     "rulerUnits": "หน่วยไม้บรรทัด",
     "gpuAcceleration": "การเร่งด้วย GPU",

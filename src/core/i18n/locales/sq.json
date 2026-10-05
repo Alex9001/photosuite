@@ -558,8 +558,12 @@
     "preferences": "Parapëlqimet",
     "unitOfMeasure": "Njësitë",
     "length": "Gjatësia",
-    "gridType": "Lloji i rrjetës",
-    "isometric": "Izometrike",
+    "gridStyle": {
+      "lines": "Vija",
+      "dashedLines": "Vija me viza",
+      "dots": "Pika"
+    },
+    "gridSubdivisions": "Nënndarje",
     "gridGap": "Hapësira e rrjetës",
     "rulerUnits": "Njësitë e rigëlës",
     "gpuAcceleration": "Përshpejtim GPU",

@@ -11,6 +11,7 @@ import { SliderDropdown } from "./number-inputs.js";
 import { Dropdown } from "./popup-controls.js";
 import { BaseWidget } from "../base-widget.js";
 
+import { Locale } from "../../../core/i18n/locale.js";
 import { Point } from "../../../core/math/point.js";
 import { EventType, UiCommand } from "../../../core/event-bus.js";
 import { addPointerDownListener, addPointerMoveListener, addPointerUpListener, disableTouchGestures, getDevicePixelRatio, getEventPos, makeElement, removePointerMoveListener, removePointerUpListener, setWidthHeightLabels } from "../../../core/dom.js";
@@ -22,6 +23,30 @@ import { psdColorToRgb, toRGBDesc } from "../../../engine/compositing/psd-color-
 const DEFAULT_SWATCH_COLORS = [
   16711680, 65280, 255, 65535, 16711935, 16776960, 0, 8421504, 16777215
 ];
+
+/**
+ * The colours {@link NamedColorPicker} offers by name, and the names it offers
+ * them under — the ones the app already has translated, so the list costs no
+ * new strings.
+ */
+const NAMED_COLOR_LABEL_KEYS = Object.freeze([
+  "colour.labels.grey",
+  "colour.labels.white",
+  "colour.labels.black",
+  "colour.labels.red",
+  "colour.labels.orange",
+  "colour.labels.yellow",
+  "colour.labels.green",
+  "colour.labels.cyan",
+  "colour.labels.blue",
+  "colour.labels.purple",
+  "colour.labels.magenta"
+]);
+
+/** Packed 0xRRGGBB for each of those names, in the same order. */
+const NAMED_COLOR_VALUES = Object.freeze([
+  0x808080, 0xffffff, 0x000000, 0xff0000, 0xff8000, 0xffff00, 0x00ff00, 0x00ffff, 0x0000ff, 0x8000ff, 0xff00ff
+]);
 
 const COLOR_WHEEL_PLANE_SIZE = 256;
 const COLOR_WHEEL_SLIDER_WIDTH = 20;
@@ -142,6 +167,79 @@ ColorSampleWidget.prototype.updateSwatchStyle = function() {
     "style",
     "background-color:#" + rgbToHex(packRgbChannels(rgb.h, rgb.l, rgb.O))
   )
+};
+
+/**
+ * A colour named from a short list, with "Custom" handing over to the colour
+ * picker — the shape a preference wants, where most of the useful answers have
+ * names and the rest is one click further away.
+ *
+ * Its value is a packed 0xRRGGBB integer rather than a row of the list, so a
+ * colour that has a name reads back under that name and any other colour reads
+ * back as Custom. The swatch beside the list shows the colour either way, and
+ * opens the picker when clicked.
+ *
+ * @param {string} labelLocaleKey
+ */
+function NamedColorPicker(labelLocaleKey) {
+  BaseWidget.call(this);
+  this.packedRgb = NAMED_COLOR_VALUES[0];
+  this.labelKey = labelLocaleKey;
+  this.el = makeElement("span", "fieldrow namedcolour");
+  // Label, then the colour, then its name — the chip reads as the value the
+  // name is naming, the way Photoshop's own colour rows are read.
+  this.labelEl = makeElement("label", "flabel");
+  this.el.appendChild(this.labelEl);
+  this.swatch = new ColorSampleWidget(false);
+  this.swatch.parent = this;
+  this.swatch.on(EventType.widgetSelect, this.onCustomColorPicked, this);
+  this.el.appendChild(this.swatch.el);
+  this.nameDropdown = new Dropdown(null, NAMED_COLOR_LABEL_KEYS.concat(["properties.custom"]));
+  this.nameDropdown.parent = this;
+  this.nameDropdown.on(EventType.widgetSelect, this.onNamePicked, this);
+  this.el.appendChild(this.nameDropdown.el);
+  this.buildUI();
+}
+
+NamedColorPicker.prototype = Object.create(BaseWidget.prototype);
+NamedColorPicker.prototype.constructor = NamedColorPicker;
+
+NamedColorPicker.prototype.buildUI = function() {
+  if (this.labelKey != null) this.labelEl.textContent = Locale.get(this.labelKey) + ":";
+  this.nameDropdown.buildUI();
+  this.setValue(this.packedRgb)
+};
+
+NamedColorPicker.prototype.getValue = function() {
+  return this.packedRgb
+};
+
+NamedColorPicker.prototype.setValue = function(packedRgb) {
+  this.packedRgb = packedRgb;
+  this.swatch.setPackedRgb(packedRgb);
+  const namedIdx = NAMED_COLOR_VALUES.indexOf(packedRgb);
+  this.nameDropdown.setValue(namedIdx == -1 ? NAMED_COLOR_VALUES.length : namedIdx)
+};
+
+/**
+ * Picking a name is the whole choice; picking Custom only opens the picker, so
+ * the list goes straight back to showing the colour still in force — which is
+ * what it should be left showing if the picker is dismissed.
+ */
+NamedColorPicker.prototype.onNamePicked = function(selectEvent) {
+  const pickedIdx = this.nameDropdown.getValue();
+  if (pickedIdx >= NAMED_COLOR_VALUES.length) {
+    this.swatch.triggerColorPicker();
+    this.setValue(this.packedRgb);
+    return
+  }
+  this.setValue(NAMED_COLOR_VALUES[pickedIdx]);
+  this.dispatch(new AppEvent(EventType.widgetSelect, false))
+};
+
+NamedColorPicker.prototype.onCustomColorPicked = function(pickEvent) {
+  this.setValue(this.swatch.getPackedRgb());
+  this.dispatch(new AppEvent(EventType.widgetSelect, false))
 };
 
 /**
@@ -336,6 +434,9 @@ export {
   ColorSampleWidget,
   ColorWheel,
   CropConstraintWidget,
+  NamedColorPicker,
+  NAMED_COLOR_LABEL_KEYS,
+  NAMED_COLOR_VALUES,
   packRgbChannels,
   unpackPackedRgb,
   clampByte,

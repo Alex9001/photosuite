@@ -558,8 +558,12 @@
     "preferences": "Asetukset",
     "unitOfMeasure": "Yksiköt",
     "length": "Pituus",
-    "gridType": "Ruudukon tyyppi",
-    "isometric": "Isometrinen",
+    "gridStyle": {
+      "lines": "Viivat",
+      "dashedLines": "Katkoviivat",
+      "dots": "Pisteet"
+    },
+    "gridSubdivisions": "Alajaot",
     "gridGap": "Ruudukon tiheys",
     "rulerUnits": "Viivaimen yksiköt",
     "gpuAcceleration": "GPU-kiihdytys",

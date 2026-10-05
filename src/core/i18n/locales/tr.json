@@ -558,8 +558,12 @@
     "preferences": "Özellikler",
     "unitOfMeasure": "Birimler",
     "length": "Uzunluk",
-    "gridType": "Izgara tipi",
-    "isometric": "Izometrik",
+    "gridStyle": {
+      "lines": "Çizgiler",
+      "dashedLines": "Kesik Çizgiler",
+      "dots": "Noktalar"
+    },
+    "gridSubdivisions": "Alt Bölümler",
     "gridGap": "Izgara aralığı",
     "rulerUnits": "Cetvel Birimleri",
     "gpuAcceleration": "GPU hızlandırma",

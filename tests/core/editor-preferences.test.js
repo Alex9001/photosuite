@@ -9,6 +9,9 @@ import { describe, it } from "node:test";
 
 import {
   DEFAULT_EDITOR_PREFS,
+  GRID_STYLE_DASH_PATTERNS,
+  GRID_STYLE_LABEL_KEYS,
+  GRID_SUBDIVISION_RANGE,
   UI_FONT_SIZE_LABEL_KEYS,
   UI_FONT_SIZE_STEPS,
   uiFontSizePx,
@@ -69,6 +72,36 @@ describe("core/editor-preferences.js", () => {
     assert.equal(normalizeEditorPrefs({ gridSize: 12.7, gridUnits: 0 }).gridSize, 13);
     assert.equal(normalizeEditorPrefs({ gridSize: 12.7, gridUnits: 4 }).gridSize, 12.7);
     assert.deepEqual(normalizeEditorPrefs({ guides: true }), { guides: true });
+  });
+
+  // The grid is drawn from these three, so a settings file carrying a value
+  // this build has no style for, or no sensible number of subdivisions, still
+  // has to produce a grid.
+  describe("grid appearance", () => {
+    it("offers a name for every line style it can stroke", () => {
+      assert.equal(GRID_STYLE_LABEL_KEYS.length, GRID_STYLE_DASH_PATTERNS.length);
+      assert.deepEqual([...GRID_STYLE_DASH_PATTERNS[0]], [], "the first style is an unbroken line");
+      for (const labelKey of GRID_STYLE_LABEL_KEYS) assert.match(labelKey, /^properties\.gridStyle\./);
+    });
+
+    it("falls back to an unbroken line for a style it does not have", () => {
+      assert.equal(normalizeEditorPrefs({ gridStyle: 2 }).gridStyle, 2);
+      assert.equal(normalizeEditorPrefs({ gridStyle: 9 }).gridStyle, 0);
+      assert.equal(normalizeEditorPrefs({ gridStyle: -1 }).gridStyle, 0);
+    });
+
+    it("keeps the colour inside a packed RGB", () => {
+      assert.equal(normalizeEditorPrefs({ gridColor: 0x00ffff }).gridColor, 0x00ffff);
+      assert.equal(normalizeEditorPrefs({ gridColor: 0 }).gridColor, 0, "black is a colour, not a missing one");
+      assert.equal(normalizeEditorPrefs({ gridColor: -5 }).gridColor, 0);
+      assert.equal(normalizeEditorPrefs({ gridColor: 1e9 }).gridColor, 0xffffff);
+    });
+
+    it("counts subdivisions in whole lines, at least one", () => {
+      assert.equal(normalizeEditorPrefs({ gridSubdivisions: 4.4 }).gridSubdivisions, 4);
+      assert.equal(normalizeEditorPrefs({ gridSubdivisions: 0 }).gridSubdivisions, GRID_SUBDIVISION_RANGE.min);
+      assert.equal(normalizeEditorPrefs({ gridSubdivisions: 1e3 }).gridSubdivisions, GRID_SUBDIVISION_RANGE.max);
+    });
   });
 
   it("snapshots and reloads every preference by its store key", () => {

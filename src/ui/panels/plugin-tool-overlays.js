@@ -20,12 +20,32 @@ import { renderMaskBoundaryOverlay, renderMaskFillOverlay, resampleUint8WithMatr
 import { appendPath, clonePath, flattenPathRecordsToPath, rectToPathOutline, toTyprPath, transformCoordPairs } from "../../engine/compositing/anti-alias.js";
 import { pointOnPathAtParam } from "../../engine/compositing/selection-utils.js";
 import { docUnitsToPixels, drawRulersOnView, formatDocLength, rulerThicknessPx, subtractRects } from "../../engine/compositing/geometry.js";
+import { GRID_STYLE_DASH_PATTERNS, readPrefValue } from "../../core/editor-preferences.js";
 
 /** Half-extent of the rectangle that stands in for "everywhere", in document units. */
 const FULL_PLANE_EXTENT_PX = 1e5;
 
 /** How far the area a tool will discard is darkened. */
 const DISCARD_SHADE_ALPHA = 0.3;
+
+/** Closest two grid lines may be drawn, in device pixels, before the step doubles. */
+const MIN_GRID_LINE_SPACING_PX = 4;
+
+/** How far a subdivision line is faded, so it reads as finer than the gridline it divides. */
+const GRID_SUBDIVISION_ALPHA = 0.5;
+
+/**
+ * How the pixel grid looks, which is not a preference: it marks out the image's
+ * own pixels at high zoom rather than a measure laid over them, so it keeps the
+ * inverting overlay that shows up against any image.
+ */
+const PIXEL_GRID_APPEARANCE = Object.freeze({
+  unitRgb: Object.freeze([.5, .5, .5]),
+  opacity: .5,
+  style: 0,
+  subdivisions: 1,
+  invertAgainstBackground: true,
+});
 
 /**
  * Attach overlay draw methods onto PluginToolPanel.prototype.
@@ -41,8 +61,8 @@ export function installPluginToolOverlays(PluginToolPanel) {
   PluginToolPanel.prototype.drawGuideAndOverlayGraphics = function(pluginDocument, canvasCtx, docView) {
     return drawGuideAndOverlayGraphics(this, PluginToolPanel, pluginDocument, canvasCtx, docView);
   };
-  PluginToolPanel.prototype.drawDocumentGrid = function(pluginDocument, canvasCtx, gridStepX, gridStepY, opacity, gridStyle) {
-    drawDocumentGrid(PluginToolPanel, pluginDocument, canvasCtx, gridStepX, gridStepY, opacity, gridStyle);
+  PluginToolPanel.prototype.drawDocumentGrid = function(pluginDocument, canvasCtx, gridStepX, gridStepY, gridAppearance) {
+    drawDocumentGrid(PluginToolPanel, pluginDocument, canvasCtx, gridStepX, gridStepY, gridAppearance);
   };
   PluginToolPanel.prototype.appendPathToCanvasContext = appendPathToCanvasContext;
 }
@@ -516,11 +536,11 @@ function drawGuideAndOverlayGraphics(panel, PluginToolPanel, pluginDocument, can
       const gridStepX = docUnitsToPixels(prefs.gridSize, pluginDocument, prefs.gridUnits);
       let gridStepY = gridStepX;
       if (prefs.gridUnits == 4) gridStepY *= pluginDocument.height / pluginDocument.width;
-      panel.drawDocumentGrid(pluginDocument, canvasCtx, gridStepX, gridStepY, 1, prefs.gridType);
+      panel.drawDocumentGrid(pluginDocument, canvasCtx, gridStepX, gridStepY, documentGridAppearance(prefs));
       drewOverlay = true;
     }
     if (prefs.showPixelGrid && pluginDocument.pathViewport.zoomScale > 7) {
-      panel.drawDocumentGrid(pluginDocument, canvasCtx, 1, 1, .5, prefs.gridType);
+      panel.drawDocumentGrid(pluginDocument, canvasCtx, 1, 1, PIXEL_GRID_APPEARANCE);
       drewOverlay = true;
     }
     if (prefs.guides) drawGuideLines(PluginToolPanel, pluginDocument, canvasCtx, halfPixelOffset);
@@ -544,45 +564,77 @@ function drawGuideAndOverlayGraphics(panel, PluginToolPanel, pluginDocument, can
 }
 
 /**
- * Stroke the document grid. `gridStyle` 0 is a rectangular grid; non-zero is an
- * isometric grid. The step is doubled until at least 4 device pixels apart so
- * the lines never crowd at low zoom.
+ * How the document grid looks, read from the preferences that say so.
+ *
+ * The colour is stored packed, as the colour picker hands it over, and is drawn
+ * literally — not through the compositor's inverting overlay — because a colour
+ * that was asked for is the colour that should appear.
  */
-function drawDocumentGrid(PluginToolPanel, pluginDocument, canvasCtx, gridStepX, gridStepY, opacity, gridStyle) {
-  while (gridStepX * pluginDocument.pathViewport.zoomScale < 4) {
+function documentGridAppearance(prefs) {
+  const packedRgb = readPrefValue(prefs, "gridColor");
+  return {
+    unitRgb: [(packedRgb >> 16 & 255) / 255, (packedRgb >> 8 & 255) / 255, (packedRgb & 255) / 255],
+    opacity: 1,
+    style: readPrefValue(prefs, "gridStyle"),
+    subdivisions: readPrefValue(prefs, "gridSubdivisions"),
+    invertAgainstBackground: false,
+  };
+}
+
+/**
+ * Stroke a grid over the document: gridlines `gridStepX` / `gridStepY` apart,
+ * with `gridAppearance.subdivisions - 1` finer lines between each pair of them.
+ *
+ * `gridAppearance` is the whole of how it looks — `unitRgb` and `opacity` the
+ * colour, `style` an index into {@link GRID_STYLE_DASH_PATTERNS}, and
+ * `invertAgainstBackground` whether to hand the compositor its invert sentinel
+ * instead of that colour, which is what keeps the pixel grid visible on any
+ * image.
+ *
+ * A step doubles until its lines are at least {@link MIN_GRID_LINE_SPACING_PX}
+ * apart, so the grid never crowds at low zoom; subdivisions that would still
+ * fall inside that spacing are dropped rather than drawn over each other.
+ */
+function drawDocumentGrid(PluginToolPanel, pluginDocument, canvasCtx, gridStepX, gridStepY, gridAppearance) {
+  const zoomScale = pluginDocument.pathViewport.zoomScale;
+  while (gridStepX * zoomScale < MIN_GRID_LINE_SPACING_PX) {
     gridStepX *= 2;
     gridStepY *= 2;
   }
+  const dashPattern = GRID_STYLE_DASH_PATTERNS[gridAppearance.style] || GRID_STYLE_DASH_PATTERNS[0],
+    subdivisions = Math.max(1, Math.round(gridAppearance.subdivisions) || 1);
+  canvasCtx.save();
+  canvasCtx.rect(0, 0, pluginDocument.width, pluginDocument.height);
+  canvasCtx.clip();
+  // Dashes are measured in device pixels, like the line width the caller set.
+  canvasCtx.setLineDash(dashPattern.map(function (dashLength) { return dashLength / zoomScale; }));
+  if (subdivisions > 1 && gridStepX / subdivisions * zoomScale >= MIN_GRID_LINE_SPACING_PX) {
+    strokeGridLines(PluginToolPanel, pluginDocument, canvasCtx, gridStepX / subdivisions, gridStepY / subdivisions, gridAppearance, GRID_SUBDIVISION_ALPHA);
+  }
+  strokeGridLines(PluginToolPanel, pluginDocument, canvasCtx, gridStepX, gridStepY, gridAppearance, 1);
+  canvasCtx.restore();
+}
+
+/** One set of grid lines, `alphaScale` of the appearance's opacity. */
+function strokeGridLines(PluginToolPanel, pluginDocument, canvasCtx, stepX, stepY, gridAppearance, alphaScale) {
   const docWidth = pluginDocument.width,
     docHeight = pluginDocument.height,
+    unitRgb = gridAppearance.unitRgb,
     halfPixelOffset = .5 / pluginDocument.pathViewport.zoomScale;
-  canvasCtx.strokeStyle = PluginToolPanel.unitRgbaToCssString([.5, .5, .5, opacity], true);
-  canvasCtx.save();
-  canvasCtx.rect(0, 0, docWidth, docHeight);
-  canvasCtx.clip();
+  canvasCtx.strokeStyle = PluginToolPanel.unitRgbaToCssString(
+    [unitRgb[0], unitRgb[1], unitRgb[2], gridAppearance.opacity * alphaScale],
+    gridAppearance.invertAgainstBackground,
+  );
   canvasCtx.beginPath();
-  for (let xPos = 0; xPos <= docWidth; xPos += gridStepX) {
+  for (let xPos = 0; xPos <= docWidth; xPos += stepX) {
     canvasCtx.moveTo(xPos + halfPixelOffset, 0);
     canvasCtx.lineTo(xPos + halfPixelOffset, docHeight);
   }
-  if (gridStyle == 0) {
-    for (let yPos = 0; yPos <= docHeight; yPos += gridStepY) {
-      canvasCtx.moveTo(0, yPos + halfPixelOffset);
-      canvasCtx.lineTo(docWidth, yPos + halfPixelOffset);
-    }
-  } else {
-    gridStepY *= Math.sqrt(4 / 3);
-    const isoSpan = gridStepY * Math.floor(docWidth / gridStepY),
-      isoSlope = docWidth * (gridStepY / (2 * gridStepX));
-    for (let isoGuideY = -isoSpan; isoGuideY <= docHeight + isoSpan; isoGuideY += gridStepY) {
-      canvasCtx.moveTo(0, isoGuideY);
-      canvasCtx.lineTo(docWidth, isoGuideY - isoSlope);
-      canvasCtx.moveTo(0, isoGuideY);
-      canvasCtx.lineTo(docWidth, isoGuideY + isoSlope);
-    }
+  for (let yPos = 0; yPos <= docHeight; yPos += stepY) {
+    canvasCtx.moveTo(0, yPos + halfPixelOffset);
+    canvasCtx.lineTo(docWidth, yPos + halfPixelOffset);
   }
   canvasCtx.stroke();
-  canvasCtx.restore();
 }
 
 /**

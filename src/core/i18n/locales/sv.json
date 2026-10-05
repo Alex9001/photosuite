@@ -558,8 +558,12 @@
     "preferences": "Preferenser",
     "unitOfMeasure": "Enheter",
     "length": "Längd",
-    "gridType": "Rutnät Typ",
-    "isometric": "Isometrisk",
+    "gridStyle": {
+      "lines": "Linjer",
+      "dashedLines": "Streckade linjer",
+      "dots": "Punkter"
+    },
+    "gridSubdivisions": "Underindelningar",
     "gridGap": "Rasterlinje var",
     "rulerUnits": "Linjalenheter",
     "gpuAcceleration": "GPU-acceleration",

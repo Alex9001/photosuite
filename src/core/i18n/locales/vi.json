@@ -558,8 +558,12 @@
     "preferences": "Sở thích",
     "unitOfMeasure": "Đơn vị",
     "length": "Chiều dài",
-    "gridType": "Loại lưới",
-    "isometric": "Phương vị",
+    "gridStyle": {
+      "lines": "Đường kẻ",
+      "dashedLines": "Đường nét đứt",
+      "dots": "Dấu chấm"
+    },
+    "gridSubdivisions": "Chia nhỏ",
     "gridGap": "Khoảng cách lưới",
     "rulerUnits": "Đơn vị thước",
     "gpuAcceleration": "Tăng tốc GPU",

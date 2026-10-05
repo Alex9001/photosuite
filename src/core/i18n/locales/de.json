@@ -558,8 +558,12 @@
     "preferences": "Einstellungen",
     "unitOfMeasure": "Einheiten",
     "length": "Länge",
-    "gridType": "Rasterart",
-    "isometric": "Isometrisch",
+    "gridStyle": {
+      "lines": "Linien",
+      "dashedLines": "Gestrichelte Linien",
+      "dots": "Punkte"
+    },
+    "gridSubdivisions": "Unterteilungen",
     "gridGap": "Rasterweite",
     "rulerUnits": "Linealeinheiten",
     "gpuAcceleration": "GPU-Beschleunigung",

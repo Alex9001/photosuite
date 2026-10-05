@@ -558,8 +558,12 @@
     "preferences": "Seaded",
     "unitOfMeasure": "Ühikud",
     "length": "Pikkus",
-    "gridType": "Võrgu tüüp",
-    "isometric": "Isomeetrilise",
+    "gridStyle": {
+      "lines": "Jooned",
+      "dashedLines": "Kriipsjooned",
+      "dots": "Punktid"
+    },
+    "gridSubdivisions": "Alajaotused",
     "gridGap": "Võrgu lõhe",
     "rulerUnits": "Joonlaua ühikud",
     "gpuAcceleration": "GPU kiirendus",

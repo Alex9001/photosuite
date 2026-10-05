@@ -558,8 +558,12 @@
     "preferences": "Predvoľby",
     "unitOfMeasure": "Jednotky",
     "length": "Dĺžka",
-    "gridType": "Typ mriežky",
-    "isometric": "Izometrický",
+    "gridStyle": {
+      "lines": "Čiary",
+      "dashedLines": "Čiarkované čiary",
+      "dots": "Bodky"
+    },
+    "gridSubdivisions": "Rozdelenia",
     "gridGap": "Veľkosť mriežky",
     "rulerUnits": "Jednotky pravítka",
     "gpuAcceleration": "GPU akcelerácia",

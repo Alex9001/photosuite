@@ -37,14 +37,12 @@ export function computeGuideSnapDelta(doc, sampleCoords, appData, snapOptions) {
   if (snapOptions == null) snapOptions = [true, null, true];
   var snapDelta = [0, 0, 1e9, 1e9];
   if (!appData.snapEnabled) return snapDelta;
-  var adjustedCoords = JSON.parse(JSON.stringify(sampleCoords));
   for (var axisIdx = 0; axisIdx < 2; axisIdx++) {
     var bestOffset = 1e9,
       axisSamples = sampleCoords[axisIdx],
       snappedCoord = 0;
     for (var sampleIdx = 0; sampleIdx < axisSamples.length; sampleIdx++) {
-      var snappedValue = snapCoordinateToGuide(doc, axisSamples[sampleIdx], adjustedCoords[1 - axisIdx][sampleIdx], axisIdx, appData, snapOptions);
-      if (snappedValue != 1e9) adjustedCoords[axisIdx][sampleIdx] = snappedValue;
+      var snappedValue = snapCoordinateToGuide(doc, axisSamples[sampleIdx], axisIdx, appData, snapOptions);
       if (snappedValue != 1e9 && Math.abs(snappedValue - axisSamples[sampleIdx]) < Math.abs(bestOffset)) {
         bestOffset = snappedValue - axisSamples[sampleIdx];
         snappedCoord = snappedValue
@@ -58,7 +56,7 @@ export function computeGuideSnapDelta(doc, sampleCoords, appData, snapOptions) {
   return snapDelta
 }
 
-export function snapCoordinateToGuide(doc, coordinate, orthoSample, axisIndex, appData, snapOptions) {
+export function snapCoordinateToGuide(doc, coordinate, axisIndex, appData, snapOptions) {
   var nearestSnap = 1e9,
     snapToggles = appData.showToggles,
     prefs = appData.prefs,
@@ -91,19 +89,9 @@ export function snapCoordinateToGuide(doc, coordinate, orthoSample, axisIndex, a
       if (Math.abs(guideCoords[guideIdx] - coordinate) < Math.abs(nearestSnap - coordinate)) nearestSnap = guideCoords[guideIdx]
   }
   if (snapToggles[1] && prefs.showGrid && appData.extras) {
-    var gridSpacing = Math.round(docUnitsToPixels(prefs.gridSize, doc, prefs.gridUnits));
-    if (axisIndex == 1 && prefs.gridType == 1) {
-      var triangleOffset = orthoSample * .5 * Math.sqrt(4 / 3),
-        gridCoord;
-      gridSpacing *= Math.sqrt(4 / 3);
-      gridCoord = Math.round((coordinate - triangleOffset) / gridSpacing) * gridSpacing + triangleOffset;
-      if (Math.abs(gridCoord - coordinate) < Math.abs(nearestSnap - coordinate)) nearestSnap = gridCoord;
-      gridCoord = Math.round((coordinate + triangleOffset) / gridSpacing) * gridSpacing - triangleOffset;
-      if (Math.abs(gridCoord - coordinate) < Math.abs(nearestSnap - coordinate)) nearestSnap = gridCoord
-    } else {
-      var gridCoord = Math.round(coordinate / gridSpacing) * gridSpacing;
-      if (Math.abs(gridCoord - coordinate) < Math.abs(nearestSnap - coordinate)) nearestSnap = gridCoord
-    }
+    var gridSpacing = Math.round(docUnitsToPixels(prefs.gridSize, doc, prefs.gridUnits)),
+      gridCoord = Math.round(coordinate / gridSpacing) * gridSpacing;
+    if (Math.abs(gridCoord - coordinate) < Math.abs(nearestSnap - coordinate)) nearestSnap = gridCoord
   }
   var sliceList = doc.slices;
   if (snapToggles[3] && prefs.slices && appData.extras && sliceList.length != 0) {
