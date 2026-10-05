@@ -140,7 +140,7 @@ function buildZoomDocumentAction(sliderValue) {
   dispatchEvt.routingChannel = ToolId.TOOL_ZOOM;
   dispatchEvt.data = {
     actionKind: "zoom",
-    S: zoomLevelFromSliderValue(sliderValue)
+    targetScale: zoomLevelFromSliderValue(sliderValue)
   };
   return dispatchEvt
 }

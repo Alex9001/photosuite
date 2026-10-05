@@ -46,7 +46,7 @@ describe("ui/panels/navigator-panel.js", () => {
     assert.equal(panB.y, -800);
   });
 
-  it("onZoomChange dispatches zoom documentAction with S wire key", () => {
+  it("onZoomChange dispatches zoom documentAction with targetScale", () => {
     const panel = Object.create(NavigatorPanel.prototype);
     const steps = ZoomTool.ZOOM_STEPS;
     panel.zoomSlider = { getValue: () => 0 };
@@ -55,7 +55,7 @@ describe("ui/panels/navigator-panel.js", () => {
     NavigatorPanel.prototype.onZoomChange.call(panel, {});
     assert.equal(events.length, 1);
     assert.equal(events[0].data.actionKind, "zoom");
-    assert.equal(events[0].data.S, steps[steps.length - 1]);
+    assert.equal(events[0].data.targetScale, steps[steps.length - 1]);
     assert.equal(events[0].routingChannel, ToolId.TOOL_ZOOM);
   });
 
