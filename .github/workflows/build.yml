@@ -218,14 +218,25 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # 22.04 rather than 24.04 on purpose: a binary linked against glibc
+          # 2.39 refuses to start on anything older, which rules out Debian 12,
+          # Ubuntu 22.04 and RHEL 9 -- including Raspberry Pi OS on the arm64
+          # side. Compiling on 22.04 puts the floor at glibc 2.35 for every
+          # package built from these binaries, and running on a newer system is
+          # forward compatible.
+          #
+          # This runner image retires with 22.04's standard support in April
+          # 2027. The replacement is to compile inside an `ubuntu:22.04`
+          # container on a current runner, which keeps the same floor without
+          # depending on the runner image.
           - arch: x64
-            os: ubuntu-24.04
+            os: ubuntu-22.04
 
           # GitHub's hosted arm64 runner, so this is a native build rather than
           # a cross-compile -- the webkit and CUPS headers it links against are
           # the arm64 ones from the runner's own apt.
           - arch: arm64
-            os: ubuntu-24.04-arm
+            os: ubuntu-22.04-arm
     steps:
       # src/index.html script-loads UPNG, UZIP, pako, PDFI and friends straight
       # out of their submodule working trees, so a shallow checkout builds an app
@@ -255,9 +266,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
-          # The runner label, so the x64 key is unchanged from when this was one
-          # matrix leg and its existing cache entry is still a hit. arm64 gets a
-          # key of its own: the two architectures cannot share a target dir.
+          # The runner label: each architecture needs a key of its own, and
+          # the baseline is part of it because objects compiled against a
+          # different glibc must not be reused.
           key: ${{ matrix.os }}
 
       - uses: actions/setup-node@v7
@@ -317,9 +328,14 @@ jobs:
             artifact: PhotoSuite-linux-rpm
             paths: src-tauri/target/release/bundle/rpm/*.rpm
 
+          # On the same 22.04 baseline as the compile: linuxdeploy copies the
+          # webkit and GTK libraries off this runner into the AppImage, so
+          # bundling on 24.04 would put glibc 2.39 libraries around a glibc 2.35
+          # binary and undo the portability gained above. The other legs declare
+          # dependencies or repackage, and embed nothing from their host.
           - label: Linux AppImage
             arch: x64
-            os: ubuntu-24.04
+            os: ubuntu-22.04
             format: appimage
             bundles: appimage
             artifact: PhotoSuite-linux-appimage

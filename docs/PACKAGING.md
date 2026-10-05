@@ -6,12 +6,13 @@ a plain branch push stops after the JavaScript lint and test job. A tag push als
 publishes the files to a **draft** GitHub release, which a maintainer reviews and
 publishes by hand.
 
-| Platform | Outputs | Runner |
-| --- | --- | --- |
-| macOS | universal `.dmg` (arm64 + x86_64) | `macos-latest` |
-| Windows | NSIS `.exe` | `windows-latest` |
-| Linux x86_64 | `.deb`, `.rpm`, `.AppImage` + `.AppImage.zsync`, `.flatpak`, `.pkg.tar.zst` | `ubuntu-24.04` |
-| Linux arm64 | `.deb`, `.rpm` | `ubuntu-24.04-arm` |
+| Platform | Outputs | Compiled on | Packaged on |
+| --- | --- | --- | --- |
+| macOS | universal `.dmg` (arm64 + x86_64) | `macos-latest` | same |
+| Windows | NSIS `.exe` | `windows-latest` | same |
+| Linux x86_64 | `.deb`, `.rpm`, `.flatpak`, `.pkg.tar.zst` | `ubuntu-22.04` | `ubuntu-24.04` |
+| Linux x86_64 | `.AppImage` + `.AppImage.zsync` | `ubuntu-22.04` | `ubuntu-22.04` |
+| Linux arm64 | `.deb`, `.rpm` | `ubuntu-22.04-arm` | `ubuntu-24.04-arm` |
 
 ## How the Linux side is laid out
 
@@ -35,6 +36,31 @@ repackage its payload — see [`packaging/flatpak/`](../packaging/flatpak) and
 [`packaging/arch/`](../packaging/arch). Doing that inside each leg, rather than
 depending on the `.deb` leg, keeps the formats independent: a broken Flatpak
 runtime cannot take the `.deb` down with it.
+
+## The glibc baseline
+
+Linux binaries are compiled on Ubuntu 22.04, not 24.04. glibc is backward but
+not forward compatible, so a binary linked against 24.04's glibc 2.39 refuses to
+start on anything older — which rules out Debian 12, Ubuntu 22.04 and RHEL 9,
+and on the arm64 side Raspberry Pi OS. Compiling on 22.04 puts the floor at
+glibc 2.35 and still runs on current distributions.
+
+The AppImage is *packaged* on 22.04 for the same reason: linuxdeploy copies the
+webkit and GTK libraries off the packaging runner into the bundle, so building it
+on 24.04 would wrap a glibc 2.35 binary in glibc 2.39 libraries and undo the
+portability. Every other leg declares dependencies (`.deb`, `.rpm`) or
+repackages an existing payload (Flatpak, pacman) and embeds nothing from its
+host, so those stay on the current runner.
+
+This also fixes the AppStream metadata spelling: the 22.04 `appstreamcli` is
+AppStream 0.15, which predates the `<developer id>` element, so the AppImage's
+metainfo uses the older `<developer_name>`.
+
+**This runner image retires with 22.04's standard support in April 2027.** The
+replacement is to compile and bundle inside an `ubuntu:22.04` container on a
+current runner, which holds the same floor without depending on the runner
+image. Moving the floor up to 24.04 instead means dropping the distributions
+listed above.
 
 ## AppImage delta updates
 
@@ -71,9 +97,10 @@ is embedded in the AppImage by the `appimage.files` entry in
 `tauri.linux.conf.json`, and
 [`packaging/flatpak/`](../packaging/flatpak/app.photosuite.PhotoSuite.metainfo.xml)
 is installed by the Flatpak manifest. They carry the same metadata and differ
-only in `<launchable>`: the Flatpak renames the desktop file to its application
-ID, while the AppImage keeps the `PhotoSuite.desktop` that Tauri generates. Keep
-them in step.
+in `<launchable>` — the Flatpak renames the desktop file to its application ID,
+while the AppImage keeps the `PhotoSuite.desktop` that Tauri generates — and in
+how the developer is declared, for the AppStream version reason above. Keep the
+rest in step.
 
 ## Building a package locally
 

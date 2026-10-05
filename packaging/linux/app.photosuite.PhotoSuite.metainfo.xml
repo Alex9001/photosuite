@@ -5,9 +5,10 @@
   AppImageHub reads this file to catalog the build.
 
   Kept in step with packaging/flatpak/app.photosuite.PhotoSuite.metainfo.xml,
-  which carries the same metadata for the Flatpak. The two differ only in
-  <launchable>: the Flatpak renames the desktop file to its application ID,
-  while the AppImage keeps the PhotoSuite.desktop that Tauri generates.
+  which carries the same metadata for the Flatpak. Two deliberate differences:
+  <launchable>, because the Flatpak renames the desktop file to its application
+  ID while the AppImage keeps the PhotoSuite.desktop that Tauri generates, and
+  the developer element, which is spelled the pre-1.0 way here.
 -->
 <component type="desktop-application">
   <id>app.photosuite.PhotoSuite</id>
@@ -16,9 +17,10 @@
   <name>PhotoSuite</name>
   <summary>Advanced image editor</summary>
 
-  <developer id="io.github.eolix">
-    <name>eolix</name>
-  </developer>
+  <!-- The legacy spelling, not the <developer id> element the Flatpak copy
+       uses: the AppImage is validated by the appstreamcli on the Ubuntu 22.04
+       baseline, which is AppStream 0.15 and predates it. -->
+  <developer_name>eolix</developer_name>
 
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>GPL-3.0-or-later</project_license>
