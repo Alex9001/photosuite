@@ -18,3 +18,11 @@ src-tauri/gen/
 
 # pdf.js source cloned on demand by vendor/js/pdfjs-codecs/build.sh
 src/vendor/pdfjs/
+
+# Linux packaging byproducts (CI builds these; these paths only appear when the
+# flatpak/pacman steps in packaging/ are run by hand)
+dist/
+flatpak-repo/
+build-dir/
+.flatpak-builder/
+packaging/flatpak/photosuite.deb

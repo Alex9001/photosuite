@@ -1,0 +1,85 @@
+# Flatpak manifest for PhotoSuite.
+#
+# Tauri's bundler has no flatpak target, so the Flatpak is assembled from the
+# payload of the .deb that `tauri bundle -b deb` produces: the CI job copies that
+# file next to this manifest as `photosuite.deb` and then runs flatpak-builder.
+#
+# Built locally with:
+#   flatpak install flathub org.gnome.Platform//47 org.gnome.Sdk//47
+#   cp src-tauri/target/release/bundle/deb/*.deb packaging/flatpak/photosuite.deb
+#   flatpak-builder --force-clean --repo=flatpak-repo build-dir \
+#     packaging/flatpak/app.photosuite.PhotoSuite.yml
+id: app.photosuite.PhotoSuite
+
+# GNOME 47 is the runtime Tauri documents for v2 apps; it carries webkit2gtk-4.1,
+# gtk3, librsvg and libsoup3 at the versions the webview expects.
+runtime: org.gnome.Platform
+runtime-version: '47'
+sdk: org.gnome.Sdk
+
+command: photosuite
+
+finish-args:
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --share=ipc
+  - --device=dri
+  # The app drives CUPS directly through cups_rs instead of the print portal.
+  - --socket=cups
+  # An image editor opens and saves documents wherever the user keeps them, so
+  # the sandbox is widened to the whole host filesystem rather than xdg-* only.
+  - --filesystem=host
+
+modules:
+  - name: photosuite
+    buildsystem: simple
+
+    sources:
+      - type: file
+        path: photosuite.deb
+      - type: file
+        path: app.photosuite.PhotoSuite.metainfo.xml
+
+    build-commands:
+      # `ar -x --output` needs binutils >= 2.40, so unpack from inside the
+      # directory instead to stay portable across runtime versions.
+      - mkdir -p deb-extract
+      - (cd deb-extract && ar -x ../photosuite.deb)
+      # Tauri writes data.tar.gz today; the glob keeps this working if the
+      # bundler ever switches the payload compression.
+      - tar -C deb-extract -xf deb-extract/data.tar.*
+
+      - install -Dm755 deb-extract/usr/bin/photosuite /app/bin/photosuite
+
+      # Bundled resources (LICENSE, THIRD-PARTY-NOTICES.md) must stay at
+      # <prefix>/lib/PhotoSuite, which is where Tauri resolves resource_dir()
+      # from the executable path ($exe_dir/../lib/<productName>).
+      - |
+        set -e
+        if [ -d deb-extract/usr/lib/PhotoSuite ]; then
+          mkdir -p /app/lib/PhotoSuite
+          cp -r deb-extract/usr/lib/PhotoSuite/. /app/lib/PhotoSuite/
+          find /app/lib/PhotoSuite -type f -exec chmod 644 {} +
+        fi
+
+      # The .desktop file and icons are renamed to the Flatpak app ID, which is
+      # what the host looks for when it exports the app.
+      - |
+        set -e
+        desktop=$(ls deb-extract/usr/share/applications/*.desktop)
+        sed -i 's/^Icon=.*/Icon=app.photosuite.PhotoSuite/' "$desktop"
+        # The window announces itself as `app.photosuite` (Tauri builds the GTK
+        # application ID from the tauri.conf.json identifier), which no longer
+        # matches the file name, so state the class explicitly.
+        sed -i '/^StartupWMClass=/d' "$desktop"
+        printf 'StartupWMClass=app.photosuite\n' >> "$desktop"
+        install -Dm644 "$desktop" /app/share/applications/app.photosuite.PhotoSuite.desktop
+      - |
+        set -e
+        for png in deb-extract/usr/share/icons/hicolor/*/apps/*.png; do
+          size=$(basename "$(dirname "$(dirname "$png")")")
+          install -Dm644 "$png" "/app/share/icons/hicolor/$size/apps/app.photosuite.PhotoSuite.png"
+        done
+
+      - install -Dm644 app.photosuite.PhotoSuite.metainfo.xml
+        /app/share/metainfo/app.photosuite.PhotoSuite.metainfo.xml
