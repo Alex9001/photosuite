@@ -3009,7 +3009,7 @@ dependencies = [
 
 [[package]]
 name = "photosuite"
-version = "0.9.15"
+version = "0.9.16"
 dependencies = [
  "cups_rs",
  "fontdb",
