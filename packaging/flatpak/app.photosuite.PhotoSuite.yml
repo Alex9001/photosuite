@@ -34,6 +34,15 @@ modules:
   - name: photosuite
     buildsystem: simple
 
+    # The .deb payload is an already-stripped release binary, so there is no
+    # debuginfo worth splitting into a .Debug extension. Saying so keeps
+    # flatpak-builder from reaching for eu-strip/eu-elfcompress, which live in
+    # elfutils -- a package neither the CI runner nor a plain flatpak-builder
+    # install is guaranteed to have.
+    build-options:
+      no-debuginfo: true
+      strip: false
+
     sources:
       - type: file
         path: photosuite.deb

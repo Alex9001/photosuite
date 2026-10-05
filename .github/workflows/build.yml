@@ -5,7 +5,7 @@
 #   PhotoSuite-windows          x64 NSIS .exe installer
 #   PhotoSuite-linux-deb        x64 .deb
 #   PhotoSuite-linux-rpm        x64 .rpm
-#   PhotoSuite-linux-appimage   x64 .AppImage
+#   PhotoSuite-linux-appimage   x64 .AppImage plus its .zsync update control file
 #   PhotoSuite-linux-flatpak    x64 single-file .flatpak bundle
 #   PhotoSuite-linux-pacman     x64 .pkg.tar.zst
 #
@@ -293,7 +293,9 @@ jobs:
             format: appimage
             bundles: appimage
             artifact: PhotoSuite-linux-appimage
-            paths: src-tauri/target/release/bundle/appimage/*.AppImage
+            paths: |
+              src-tauri/target/release/bundle/appimage/*.AppImage
+              src-tauri/target/release/bundle/appimage/*.AppImage.zsync
 
           # Tauri's bundler has no flatpak or pacman target, so these two
           # legs bundle a .deb and repackage its payload. Doing that here
@@ -339,6 +341,7 @@ jobs:
           case "${{ matrix.format }}" in
             rpm) packages+=(rpm) ;;
             flatpak) packages+=(flatpak flatpak-builder) ;;
+            appimage) packages+=(zsync) ;;
           esac
 
           sudo apt-get install --no-install-recommends -y "${packages[@]}"
@@ -372,6 +375,30 @@ jobs:
       # the target directory rather than compiling again.
       - name: Tauri bundle (${{ matrix.bundles }})
         run: npx tauri bundle -b ${{ matrix.bundles }}
+
+      # linuxdeploy emits the .AppImage only, so the .zsync control file that
+      # AppImageUpdate reads for delta updates is generated here from the
+      # finished bundle. zsyncmake records the download URL inside the .zsync,
+      # so it has to name the release asset this AppImage will be published as
+      # -- which is why the URL is built from the tag rather than hardcoded.
+      #
+      # On a workflow_dispatch run there is no tag and nothing is published, so
+      # the URL baked in points at a ref that may not exist. The .zsync is still
+      # produced, since the artifact is only there to be inspected.
+      - name: Generate AppImage zsync file
+        if: matrix.format == 'appimage'
+        run: |
+          set -euo pipefail
+          cd src-tauri/target/release/bundle/appimage
+
+          appimage=$(ls *.AppImage)
+          url="https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/$appimage"
+
+          # -u is the URL clients re-fetch from; -o keeps the conventional
+          # <bundle>.AppImage.zsync name that AppImageUpdate expects.
+          zsyncmake -u "$url" -o "$appimage.zsync" "$appimage"
+
+          echo "Wrote $appimage.zsync pointing at $url"
 
       - name: Build Flatpak bundle
         if: matrix.format == 'flatpak'
