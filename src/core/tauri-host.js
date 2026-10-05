@@ -62,6 +62,34 @@ export function nativeWriteFile(path, bytes) {
   });
 }
 /**
+ * The main window's size in logical pixels, as `[width, height]`, or null when
+ * the host cannot answer.
+ * @returns {Promise<[number, number]|null>}
+ */
+export function getWindowSize() {
+  const tauri = typeof window !== "undefined" ? window.__TAURI__ : null;
+  if (!(tauri && tauri.core && typeof tauri.core.invoke === "function")) return Promise.resolve(null);
+  return tauri.core.invoke("photosuite_get_window_size").catch(function(err) {
+    console.warn("PhotoSuite: could not read the window size", err);
+    return null;
+  });
+}
+
+/**
+ * Resize the main window to a size from a previous session. Size only — the
+ * position is deliberately not restored, so the window cannot come back on a
+ * display that is no longer attached.
+ * @returns {Promise<void>}
+ */
+export function setWindowSize(width, height) {
+  const tauri = typeof window !== "undefined" ? window.__TAURI__ : null;
+  if (!(tauri && tauri.core && typeof tauri.core.invoke === "function")) return Promise.resolve();
+  return tauri.core.invoke("photosuite_set_window_size", { width, height }).catch(function(err) {
+    console.warn("PhotoSuite: could not restore the window size", err);
+  });
+}
+
+/**
  * The third-party notices packaged with the application, as Markdown text.
  * Rejects when the file is not where the host expects it.
  */

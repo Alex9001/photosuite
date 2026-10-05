@@ -641,7 +641,17 @@ function handleOpenRecentFileFailed(controller, data) {
  */
 function handleExitApplication(controller) {
   confirmDiscardUnsavedDocuments(controller.openDocs, 0, function(shouldQuit) {
-    if (shouldQuit) exitHostApplication();
+    if (!shouldQuit) return;
+    // The window size is saved on a delay after a resize, so a quit soon after
+    // dragging the frame would otherwise beat the save to it.
+    saveWindowSizeBeforeQuit(controller).then(exitHostApplication, exitHostApplication);
+  });
+}
+
+function saveWindowSizeBeforeQuit(controller) {
+  if (typeof controller.flushWindowSizeSave !== "function") return Promise.resolve();
+  return controller.flushWindowSizeSave().catch(function(err) {
+    console.warn("PhotoSuite: failed to save the window size on quit", err);
   });
 }
 
@@ -980,6 +990,20 @@ function handlePresetPopupSet(controller, appData, presetPayload) {
 }
 
 /**
+ * Write the open/closed panels to disk.
+ *
+ * Opening and closing a panel is the setting; without this it lived only in
+ * memory and reached the settings file by accident, when some later change —
+ * a theme, a preference — happened to save. Closing a panel and quitting lost
+ * it, which is the whole of the bug this answers.
+ */
+function persistPanelLayout(controller) {
+  persistAppSettings(controller).catch(function(err) {
+    console.warn("PhotoSuite: failed to save the panel layout", err);
+  });
+}
+
+/**
  * @returns {{ aborted: boolean, presetPayload: * }}
  */
 function handlePresetPopupAdd(controller, doc, appData, popupType, presetPayload, data) {
@@ -990,6 +1014,7 @@ function handlePresetPopupAdd(controller, doc, appData, popupType, presetPayload
       return panelIdLeft - panelIdRight;
     });
     controller.refreshNativeMenuBar();
+    persistPanelLayout(controller);
     return { aborted: false, presetPayload: presetPayload };
   }
   if (resource == null) {
@@ -1063,6 +1088,7 @@ function handlePresetPopupDelete(controller, appData, popupType, data) {
   if (popupType == PopupTypes.FONTS) {
     removePanelFromEffectRows(data.value, appData);
     controller.refreshNativeMenuBar();
+    persistPanelLayout(controller);
     return;
   }
   const resource = PopupTypes.getPresetResource(popupType);
