@@ -54,10 +54,14 @@ Pre-built binary packages are available on the **[Releases](https://github.com/e
 | Platform | Package Format | Architecture |
 |:---|:---|:---|
 | **macOS** | Universal `.dmg` | Apple Silicon (arm64) & Intel (x86_64) |
-| **Linux** | `.deb`, `.rpm` | x86_64 |
+| **Linux** | `.deb`, `.rpm` | x86_64 and arm64 (aarch64) |
+| **Linux** | `.AppImage` (delta updates), `.flatpak`, `.pkg.tar.zst` | x86_64 |
 | **Windows** | NSIS installer (`.exe`) | x64 |
 
 ---
+
+See [packaging and release verification](docs/PACKAGING.md) for how each format is
+built and checked.
 
 ## Screenshots
 
@@ -175,7 +179,7 @@ npm run verify     # Verify imports, cyclic dependencies, static bindings, and b
 npm run lint       # Run ESLint across src/
 ```
 
-Automated cross-platform builds (macOS universal, Linux deb/rpm, Windows x64) are run on every release tag via [GitHub Actions](.github/workflows/build.yml).
+Automated cross-platform builds (macOS universal, Windows x64, Linux x86_64 deb/rpm/AppImage/Flatpak/pacman and Linux arm64 deb/rpm) are run on every release tag via [GitHub Actions](.github/workflows/build.yml).
 
 ---
 

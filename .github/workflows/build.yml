@@ -5,15 +5,23 @@
 #   PhotoSuite-windows          x64 NSIS .exe installer
 #   PhotoSuite-linux-deb        x64 .deb
 #   PhotoSuite-linux-rpm        x64 .rpm
-#   PhotoSuite-linux-appimage   x64 .AppImage
+#   PhotoSuite-linux-appimage   x64 .AppImage plus its .zsync update control file
 #   PhotoSuite-linux-flatpak    x64 single-file .flatpak bundle
 #   PhotoSuite-linux-pacman     x64 .pkg.tar.zst
+#   PhotoSuite-linux-arm64-deb  arm64 .deb
+#   PhotoSuite-linux-arm64-rpm  arm64 .rpm
 #
-# The Linux side is split in two: `build-linux` compiles the binary once and
-# `package-linux` fans out one runner per package format. The Rust build is by
-# far the expensive part, so compiling once and sharing the binary as a
-# short-lived artifact is what keeps the fan-out cheap -- five independent
-# `tauri build` runs would pay for the same compile five times over.
+# The Linux side is split in two: `build-linux` compiles the binary once per
+# architecture and `package-linux` fans out one runner per package format. The
+# Rust build is by far the expensive part, so compiling once and sharing the
+# binary as a short-lived artifact is what keeps the fan-out cheap -- seven
+# independent `tauri build` runs would pay for the same compile seven times
+# over.
+#
+# arm64 ships as .deb and .rpm only. Those two cover the distributions people
+# actually run on arm64 hardware, and every extra format doubles a packaging
+# leg for a platform whose other bundlers (AppImage's runtime, the Flatpak
+# runtime, makepkg's container image) each need their own arm64 story.
 #
 # Installers are only built for a `v*` tag push (or a manual workflow_dispatch run),
 # not on a plain push to main. A tag push additionally publishes those files to a
@@ -187,7 +195,7 @@ jobs:
       # `--target` is a tauri flag; putting it after `--` would hand it to cargo
       # and leave the bundler looking in the wrong target directory.
       - name: Tauri build
-        run: npx tauri build ${{ matrix.tauri_args }}
+        run: npx tauri build ${{ matrix.tauri_args }} -- --locked
 
       - name: Upload ${{ matrix.artifact }}
         uses: actions/upload-artifact@v7
@@ -200,12 +208,35 @@ jobs:
   # bundles from this one binary instead of recompiling, which is what makes the
   # fan-out below worth doing.
   build-linux:
-    name: Build (Linux x64)
+    name: Build (Linux ${{ matrix.arch }})
     needs: check-js
     if: >-
       startsWith(github.ref, 'refs/tags/v') ||
       github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-24.04
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # 22.04 rather than 24.04 on purpose: a binary linked against glibc
+          # 2.39 refuses to start on anything older, which rules out Debian 12,
+          # Ubuntu 22.04 and RHEL 9 -- including Raspberry Pi OS on the arm64
+          # side. Compiling on 22.04 puts the floor at glibc 2.35 for every
+          # package built from these binaries, and running on a newer system is
+          # forward compatible.
+          #
+          # This runner image retires with 22.04's standard support in April
+          # 2027. The replacement is to compile inside an `ubuntu:22.04`
+          # container on a current runner, which keeps the same floor without
+          # depending on the runner image.
+          - arch: x64
+            os: ubuntu-22.04
+
+          # GitHub's hosted arm64 runner, so this is a native build rather than
+          # a cross-compile -- the webkit and CUPS headers it links against are
+          # the arm64 ones from the runner's own apt.
+          - arch: arm64
+            os: ubuntu-22.04-arm
     steps:
       # src/index.html script-loads UPNG, UZIP, pako, PDFI and friends straight
       # out of their submodule working trees, so a shallow checkout builds an app
@@ -235,9 +266,10 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
-          # Unchanged from when this was one matrix leg, so the existing cache
-          # entry is still a hit.
-          key: ubuntu-24.04
+          # The runner label: each architecture needs a key of its own, and
+          # the baseline is part of it because objects compiled against a
+          # different glibc must not be reused.
+          key: ${{ matrix.os }}
 
       - uses: actions/setup-node@v7
         with:
@@ -253,12 +285,12 @@ jobs:
       # The frontend is embedded into the binary by tauri::generate_context!, so
       # everything the bundlers need is in this one file.
       - name: Tauri build (no bundle)
-        run: npx tauri build --no-bundle
+        run: npx tauri build --no-bundle -- --locked
 
-      - name: Upload linux-binary
+      - name: Upload linux-binary-${{ matrix.arch }}
         uses: actions/upload-artifact@v7
         with:
-          name: linux-binary
+          name: linux-binary-${{ matrix.arch }}
           path: src-tauri/target/release/photosuite
           if-no-files-found: error
           # Purely an intermediate handoff to package-linux; nothing needs it
@@ -272,43 +304,81 @@ jobs:
   package-linux:
     name: Package (${{ matrix.label }})
     needs: build-linux
-    runs-on: ubuntu-24.04
+    # Each leg bundles on a runner of the architecture it packages: the deb and
+    # rpm bundlers stamp the package architecture from the host they run on, so
+    # an arm64 package built on an x64 runner would be labelled amd64.
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - label: Linux .deb
+            arch: x64
+            os: ubuntu-24.04
             format: deb
             bundles: deb
             artifact: PhotoSuite-linux-deb
             paths: src-tauri/target/release/bundle/deb/*.deb
 
           - label: Linux .rpm
+            arch: x64
+            os: ubuntu-24.04
             format: rpm
             bundles: rpm
             artifact: PhotoSuite-linux-rpm
             paths: src-tauri/target/release/bundle/rpm/*.rpm
 
+          # On the same 22.04 baseline as the compile: linuxdeploy copies the
+          # webkit and GTK libraries off this runner into the AppImage, so
+          # bundling on 24.04 would put glibc 2.39 libraries around a glibc 2.35
+          # binary and undo the portability gained above. The other legs declare
+          # dependencies or repackage, and embed nothing from their host.
           - label: Linux AppImage
+            arch: x64
+            os: ubuntu-22.04
             format: appimage
             bundles: appimage
             artifact: PhotoSuite-linux-appimage
-            paths: src-tauri/target/release/bundle/appimage/*.AppImage
+            paths: |
+              src-tauri/target/release/bundle/appimage/*.AppImage
+              src-tauri/target/release/bundle/appimage/*.AppImage.zsync
 
           # Tauri's bundler has no flatpak or pacman target, so these two
           # legs bundle a .deb and repackage its payload. Doing that here
           # rather than depending on the .deb leg keeps all five independent.
           - label: Linux Flatpak
+            arch: x64
+            os: ubuntu-24.04
             format: flatpak
             bundles: deb
             artifact: PhotoSuite-linux-flatpak
             paths: dist/flatpak/*.flatpak
 
           - label: Linux .pkg.tar.zst
+            arch: x64
+            os: ubuntu-24.04
             format: pacman
             bundles: deb
             artifact: PhotoSuite-linux-pacman
             paths: dist/pacman/*.pkg.tar.zst
+
+          # arm64 stops at the two native package formats; see the note at the
+          # top of this file.
+          - label: Linux arm64 .deb
+            arch: arm64
+            os: ubuntu-24.04-arm
+            format: deb
+            bundles: deb
+            artifact: PhotoSuite-linux-arm64-deb
+            paths: src-tauri/target/release/bundle/deb/*.deb
+
+          - label: Linux arm64 .rpm
+            arch: arm64
+            os: ubuntu-24.04-arm
+            format: rpm
+            bundles: rpm
+            artifact: PhotoSuite-linux-arm64-rpm
+            paths: src-tauri/target/release/bundle/rpm/*.rpm
 
     env:
       # GitHub runners have no FUSE, so linuxdeploy and appimagetool have to
@@ -339,6 +409,9 @@ jobs:
           case "${{ matrix.format }}" in
             rpm) packages+=(rpm) ;;
             flatpak) packages+=(flatpak flatpak-builder) ;;
+            # scripts/verify-appimage.sh validates the desktop entry and the
+            # AppStream metadata, and rebuilds the image from its own .zsync.
+            appimage) packages+=(zsync desktop-file-utils appstream) ;;
           esac
 
           sudo apt-get install --no-install-recommends -y "${packages[@]}"
@@ -357,10 +430,10 @@ jobs:
       # Only needed for the Tauri CLI itself, which does the bundling.
       - run: npm ci
 
-      - name: Download linux-binary
+      - name: Download linux-binary-${{ matrix.arch }}
         uses: actions/download-artifact@v8
         with:
-          name: linux-binary
+          name: linux-binary-${{ matrix.arch }}
           path: src-tauri/target/release
 
       # Artifact archives do not carry file modes, so the binary comes back
@@ -368,10 +441,34 @@ jobs:
       - name: Restore the executable bit
         run: chmod +x src-tauri/target/release/photosuite
 
+      # linuxdeploy-plugin-appimage reads this and hands appimagetool `-u`, which
+      # both embeds the update information in the AppImage and writes the .zsync
+      # control file beside it. Doing it this way rather than running zsyncmake
+      # afterwards is what makes delta updates discoverable: the
+      # `gh-releases-zsync` transport resolves the newest published release
+      # through the GitHub API, so the channel does not go stale when the
+      # version in the filename changes.
+      #
+      # The filename is a glob because it carries the version; it has to match
+      # the asset the release actually publishes, which
+      # scripts/verify-appimage.sh asserts.
+      - name: Point the AppImage update channel at the latest release
+        if: matrix.format == 'appimage'
+        run: |
+          set -euo pipefail
+          owner="${GITHUB_REPOSITORY%/*}"
+          repository="${GITHUB_REPOSITORY#*/}"
+          echo "LDAI_UPDATE_INFORMATION=gh-releases-zsync|$owner|$repository|latest|PhotoSuite_*_amd64.AppImage.zsync" \
+            >> "$GITHUB_ENV"
+
       # `tauri bundle` reuses the binary that `tauri build --no-bundle` left in
       # the target directory rather than compiling again.
       - name: Tauri bundle (${{ matrix.bundles }})
         run: npx tauri bundle -b ${{ matrix.bundles }}
+
+      - name: Verify AppImage
+        if: matrix.format == 'appimage'
+        run: bash scripts/verify-appimage.sh src-tauri/target/release/bundle/appimage
 
       - name: Build Flatpak bundle
         if: matrix.format == 'flatpak'
@@ -440,8 +537,8 @@ jobs:
     permissions:
       contents: write
     steps:
-      # The pattern excludes the intermediate `linux-binary` artifact, which
-      # must not end up as a release asset.
+      # The pattern excludes the intermediate `linux-binary-*` artifacts, which
+      # must not end up as release assets.
       - uses: actions/download-artifact@v8
         with:
           path: dist
