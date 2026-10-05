@@ -359,9 +359,8 @@ PropertiesPanel.prototype.open = function(doc) {
   this.tabButtons[2].setEnabled(hasLiveShape)
 };
 
-PropertiesPanel.prototype.onUpdate = function(doc, popupType) {
-  this.doc = doc;
-  if (this.layerSection) this.layerSection.onUpdate(doc, popupType)
+PropertiesPanel.prototype.onUpdate = function(appData, popupType) {
+  if (this.layerSection) this.layerSection.onUpdate(appData, popupType)
 };
 
 /**
