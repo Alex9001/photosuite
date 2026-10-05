@@ -558,8 +558,12 @@
     "preferences": "Voorkeuren",
     "unitOfMeasure": "Eenheden",
     "length": "Lengte",
-    "gridType": "Rastertype",
-    "isometric": "Isometrisch",
+    "gridStyle": {
+      "lines": "Lijnen",
+      "dashedLines": "Streepjeslijnen",
+      "dots": "Stippen"
+    },
+    "gridSubdivisions": "Onderverdelingen",
     "gridGap": "Rasterlijn na elke",
     "rulerUnits": "Liniaaleenheden",
     "gpuAcceleration": "GPU-versnelling",

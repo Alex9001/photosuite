@@ -558,8 +558,12 @@
     "preferences": "Lastnosti",
     "unitOfMeasure": "Enote",
     "length": "Dolžina",
-    "gridType": "Vrsta mreže",
-    "isometric": "Izometrično",
+    "gridStyle": {
+      "lines": "Črte",
+      "dashedLines": "Črtkane črte",
+      "dots": "Pike"
+    },
+    "gridSubdivisions": "Podrazdelki",
     "gridGap": "Razmak mreže",
     "rulerUnits": "Enote ravnila",
     "gpuAcceleration": "GPU pospeševanje",

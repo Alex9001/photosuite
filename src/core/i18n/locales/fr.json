@@ -558,8 +558,12 @@
     "preferences": "Préférences",
     "unitOfMeasure": "Unités",
     "length": "Longueur",
-    "gridType": "Type de grille",
-    "isometric": "Isométrique",
+    "gridStyle": {
+      "lines": "Lignes",
+      "dashedLines": "Lignes pointillées",
+      "dots": "Points"
+    },
+    "gridSubdivisions": "Subdivisions",
     "gridGap": "Écart de grille",
     "rulerUnits": "Unités de la règle",
     "gpuAcceleration": "Accélération GPU",

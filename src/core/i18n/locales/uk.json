@@ -558,8 +558,12 @@
     "preferences": "Налаштування",
     "unitOfMeasure": "Одиниці",
     "length": "Довжина",
-    "gridType": "Тип сітки",
-    "isometric": "Ізометричні",
+    "gridStyle": {
+      "lines": "Лінії",
+      "dashedLines": "Штрихові лінії",
+      "dots": "Крапки"
+    },
+    "gridSubdivisions": "Підрозділи",
     "gridGap": "Лінія сітки кожні",
     "rulerUnits": "Початок координат",
     "gpuAcceleration": "Прискорення GPU",

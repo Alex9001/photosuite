@@ -558,8 +558,12 @@
     "preferences": "Preferencje",
     "unitOfMeasure": "Jednostki",
     "length": "Długość",
-    "gridType": "Typ siatki",
-    "isometric": "Izometryczny",
+    "gridStyle": {
+      "lines": "Linie",
+      "dashedLines": "Linie kreskowane",
+      "dots": "Kropki"
+    },
+    "gridSubdivisions": "Podziały",
     "gridGap": "Rozstaw siatki",
     "rulerUnits": "Jednostki miarki",
     "gpuAcceleration": "Akceleracja GPU",

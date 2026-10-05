@@ -558,8 +558,12 @@
     "preferences": "설정",
     "unitOfMeasure": "단위",
     "length": "길이",
-    "gridType": "격자 유형",
-    "isometric": "등축",
+    "gridStyle": {
+      "lines": "선",
+      "dashedLines": "파선",
+      "dots": "점"
+    },
+    "gridSubdivisions": "세분",
     "gridGap": "격자 간격",
     "rulerUnits": "눈금자 단위",
     "gpuAcceleration": "GPU 가속",

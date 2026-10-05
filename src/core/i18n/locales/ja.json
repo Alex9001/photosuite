@@ -558,8 +558,12 @@
     "preferences": "設定",
     "unitOfMeasure": "単位",
     "length": "長さ",
-    "gridType": "グリッドタイプ",
-    "isometric": "アイソメ",
+    "gridStyle": {
+      "lines": "実線",
+      "dashedLines": "破線",
+      "dots": "点線"
+    },
+    "gridSubdivisions": "分割数",
     "gridGap": "グリッドの間隔",
     "rulerUnits": "定規の単位",
     "gpuAcceleration": "GPU アクセラレーション",

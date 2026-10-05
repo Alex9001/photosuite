@@ -558,8 +558,12 @@
     "preferences": "首选项",
     "unitOfMeasure": "单位",
     "length": "长度",
-    "gridType": "网格类型",
-    "isometric": "等距",
+    "gridStyle": {
+      "lines": "直线",
+      "dashedLines": "虚线",
+      "dots": "网点"
+    },
+    "gridSubdivisions": "子网格",
     "gridGap": "网格间距",
     "rulerUnits": "标尺单位",
     "gpuAcceleration": "GPU 加速",

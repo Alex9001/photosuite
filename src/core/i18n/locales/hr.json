@@ -558,8 +558,12 @@
     "preferences": "Postavke",
     "unitOfMeasure": "Jedinice",
     "length": "Dužina",
-    "gridType": "Vrsta mreže",
-    "isometric": "Izometrijska",
+    "gridStyle": {
+      "lines": "Linije",
+      "dashedLines": "Crtkane linije",
+      "dots": "Točke"
+    },
+    "gridSubdivisions": "Podjele",
     "gridGap": "Veličina mreže",
     "rulerUnits": "Jedinice ravnala",
     "gpuAcceleration": "GPU ubrzanje",

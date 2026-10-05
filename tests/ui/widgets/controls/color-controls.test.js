@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import { describe, it, before } from "node:test";
 
 import { installBrowserGlobals } from "../../../helpers/stub-browser-globals.js";
+import { EventType } from "../../../../src/core/event-bus.js";
 
 installBrowserGlobals();
 
@@ -17,6 +18,9 @@ let ColorSwatchGrid;
 let ColorSampleWidget;
 let ColorWheel;
 let CropConstraintWidget;
+let NamedColorPicker;
+let NAMED_COLOR_LABEL_KEYS;
+let NAMED_COLOR_VALUES;
 
 before(async () => {
   ({
@@ -28,7 +32,10 @@ before(async () => {
     ColorSwatchGrid,
     ColorSampleWidget,
     ColorWheel,
-    CropConstraintWidget
+    CropConstraintWidget,
+    NamedColorPicker,
+    NAMED_COLOR_LABEL_KEYS,
+    NAMED_COLOR_VALUES
   } = await import("../../../../src/ui/widgets/controls/color-controls.js"));
 });
 
@@ -56,5 +63,43 @@ describe("ui/widgets/controls/color-controls.js", () => {
     assert.equal(typeof ColorSampleWidget, "function");
     assert.equal(typeof ColorWheel, "function");
     assert.equal(typeof CropConstraintWidget, "function");
+    assert.equal(typeof NamedColorPicker, "function");
+  });
+
+  // The picker speaks in colours, not in rows of its own list, so that a stored
+  // colour decides what the list shows rather than the other way round.
+  describe("NamedColorPicker", () => {
+    it("names a colour it has a name for, and calls the rest Custom", () => {
+      assert.equal(NAMED_COLOR_LABEL_KEYS.length, NAMED_COLOR_VALUES.length);
+      const picker = new NamedColorPicker("colour.title");
+      const customRow = NAMED_COLOR_VALUES.length;
+
+      picker.setValue(NAMED_COLOR_VALUES[2]);
+      assert.equal(picker.getValue(), NAMED_COLOR_VALUES[2]);
+      assert.equal(picker.nameDropdown.getValue(), 2);
+
+      picker.setValue(0x123456);
+      assert.equal(picker.getValue(), 0x123456);
+      assert.equal(picker.nameDropdown.getValue(), customRow);
+      assert.equal(picker.swatch.getPackedRgb(), 0x123456);
+    });
+
+    it("picking a name is the choice; picking Custom only opens the picker", () => {
+      const picker = new NamedColorPicker("colour.title");
+      const changes = [];
+      picker.on(EventType.widgetSelect, () => changes.push(picker.getValue()));
+
+      picker.nameDropdown.setValue(3);
+      picker.onNamePicked();
+      assert.deepEqual(changes, [NAMED_COLOR_VALUES[3]]);
+
+      let picksOpened = 0;
+      picker.swatch.triggerColorPicker = () => picksOpened++;
+      picker.nameDropdown.setValue(NAMED_COLOR_VALUES.length);
+      picker.onNamePicked();
+      assert.equal(picksOpened, 1);
+      assert.deepEqual(changes, [NAMED_COLOR_VALUES[3]], "nothing is chosen until the picker answers");
+      assert.equal(picker.nameDropdown.getValue(), 3, "a dismissed picker leaves the colour showing");
+    });
   });
 });

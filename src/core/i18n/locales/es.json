@@ -558,8 +558,12 @@
     "preferences": "Preferencias",
     "unitOfMeasure": "Unidades",
     "length": "Longitud",
-    "gridType": "Tipo de cuadrícula",
-    "isometric": "Isometrico",
+    "gridStyle": {
+      "lines": "Líneas",
+      "dashedLines": "Líneas discontinuas",
+      "dots": "Puntos"
+    },
+    "gridSubdivisions": "Subdivisiones",
     "gridGap": "Espaciado de cuadrícula",
     "rulerUnits": "Unidad de regla",
     "gpuAcceleration": "Aceleración GPU",

@@ -558,8 +558,12 @@
     "preferences": "Подешавања",
     "unitOfMeasure": "Јединице",
     "length": "Дужина",
-    "gridType": "Тип мреже",
-    "isometric": "Изометријски",
+    "gridStyle": {
+      "lines": "Линије",
+      "dashedLines": "Испрекидане линије",
+      "dots": "Тачке"
+    },
+    "gridSubdivisions": "Поделе",
     "gridGap": "Процеп мреже",
     "rulerUnits": "Јединице лењира",
     "gpuAcceleration": "GPU убрзање",

@@ -558,8 +558,12 @@
     "preferences": "Indstillinger",
     "unitOfMeasure": "Enheder",
     "length": "Længde",
-    "gridType": "Gittertype",
-    "isometric": "Isometrisk",
+    "gridStyle": {
+      "lines": "Linjer",
+      "dashedLines": "Stiplede linjer",
+      "dots": "Prikker"
+    },
+    "gridSubdivisions": "Underinddelinger",
     "gridGap": "Gitterlinje for hver",
     "rulerUnits": "Måleenheder",
     "gpuAcceleration": "GPU-acceleration",

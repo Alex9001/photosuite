@@ -558,8 +558,12 @@
     "preferences": "Preferências",
     "unitOfMeasure": "Unidades",
     "length": "lange",
-    "gridType": "Tipo de grade",
-    "isometric": "Isométrico",
+    "gridStyle": {
+      "lines": "Linhas",
+      "dashedLines": "Linhas tracejadas",
+      "dots": "Pontos"
+    },
+    "gridSubdivisions": "Subdivisões",
     "gridGap": "Espaçamento da grade",
     "rulerUnits": "Unidades da régua",
     "gpuAcceleration": "Aceleração GPU",

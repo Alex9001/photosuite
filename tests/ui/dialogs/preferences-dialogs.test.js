@@ -115,7 +115,9 @@ describe("ui/dialogs/preferences-dialogs.js", () => {
       assert.equal(sectionOf("zoomWithScrollWheel"), "tools");
       assert.equal(sectionOf("AppWindow"), "units");
       assert.equal(sectionOf("guides"), "guides");
-      assert.equal(sectionOf("gridType"), "guides");
+      assert.equal(sectionOf("gridStyle"), "guides");
+      assert.equal(sectionOf("gridColor"), "guides");
+      assert.equal(sectionOf("gridSubdivisions"), "guides");
       assert.equal(sectionOf("uiFontSize"), "interface");
       const interfaceRows = sectionRows(PREFERENCE_SECTIONS[1]).map((row) => row.control || row.pref);
       assert.deepEqual(interfaceRows, ["theme", "language", "uiFontSize"]);

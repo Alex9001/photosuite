@@ -558,8 +558,12 @@
     "preferences": "Preferințe",
     "unitOfMeasure": "Unități",
     "length": "Lungime",
-    "gridType": "Tip de grilă",
-    "isometric": "Izometrică",
+    "gridStyle": {
+      "lines": "Linii",
+      "dashedLines": "Linii întrerupte",
+      "dots": "Puncte"
+    },
+    "gridSubdivisions": "Subdiviziuni",
     "gridGap": "Spațiu dintre grile",
     "rulerUnits": "Unități de riglă",
     "gpuAcceleration": "Accelerare GPU",

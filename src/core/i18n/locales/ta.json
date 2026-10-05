@@ -558,8 +558,12 @@
     "preferences": "விருப்பத்தேர்வுகள்",
     "unitOfMeasure": "அலகுகள்",
     "length": "நீளம்",
-    "gridType": "கட்ட வகை",
-    "isometric": "சமநீள",
+    "gridStyle": {
+      "lines": "கோடுகள்",
+      "dashedLines": "கோடிட்ட கோடுகள்",
+      "dots": "புள்ளிகள்"
+    },
+    "gridSubdivisions": "உட்பிரிவுகள்",
     "gridGap": "கட்ட இடைவெளி",
     "rulerUnits": "வரக்கோல் அலகுகள்",
     "gpuAcceleration": "GPU முடுக்கம்",

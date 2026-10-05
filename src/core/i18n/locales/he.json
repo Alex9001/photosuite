@@ -558,8 +558,12 @@
     "preferences": "העדפות",
     "unitOfMeasure": "יחידות",
     "length": "אורך",
-    "gridType": "סוג תשבוץ",
-    "isometric": "יסומטרי",
+    "gridStyle": {
+      "lines": "קווים",
+      "dashedLines": "קווים מקווקווים",
+      "dots": "נקודות"
+    },
+    "gridSubdivisions": "חלוקות משנה",
     "gridGap": "דבק תשבוץ",
     "rulerUnits": "יחידות מידה",
     "gpuAcceleration": "האצת GPU",

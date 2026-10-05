@@ -558,8 +558,12 @@
     "preferences": "འདམ་ང་།",
     "unitOfMeasure": "ཚད་གཞི།",
     "length": "རིང་ཚད།",
-    "gridType": "སྒྲོམ་ཀྱི་རིགས།",
-    "isometric": "རྫས་མཚུངས།",
+    "gridStyle": {
+      "lines": "ཐིག་རིས།",
+      "dashedLines": "ཆད་ཐིག",
+      "dots": "ཚེག་རིས།"
+    },
+    "gridSubdivisions": "སྒྲོམ་ཆུང་གྲངས།",
     "gridGap": "སྒྲོམ་གྱི་བར་ཐག",
     "rulerUnits": "ཐིག་ཤིང་ཚད་གཞི།",
     "gpuAcceleration": "GPU མགྱོགས་སྣོན།",

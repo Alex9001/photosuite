@@ -18,6 +18,30 @@
 const PERCENT_UNIT_INDEX = 4;
 
 /**
+ * How a gridline is stroked, in the order the Preferences picker offers the
+ * choices: the dash pattern each one uses, in device pixels, with an empty
+ * pattern meaning an unbroken line.
+ *
+ * The pattern is the whole of what a style is — the picker draws its swatch
+ * from it and the overlay strokes with it — so the two cannot drift apart.
+ */
+export const GRID_STYLE_DASH_PATTERNS = Object.freeze([
+  Object.freeze([]),
+  Object.freeze([4, 3]),
+  Object.freeze([1, 3]),
+]);
+
+/** Names for those styles, in the same order. */
+export const GRID_STYLE_LABEL_KEYS = Object.freeze([
+  "properties.gridStyle.lines",
+  "properties.gridStyle.dashedLines",
+  "properties.gridStyle.dots",
+]);
+
+/** Finer lines a gridline may be divided into, as the Preferences row bounds it. */
+export const GRID_SUBDIVISION_RANGE = Object.freeze({ min: 1, max: 100 });
+
+/**
  * @typedef {object} EditorPreference
  * @property {string} key Name on `appData.prefs`.
  * @property {string} storeKey Key inside the persisted `eparams` object.
@@ -29,7 +53,41 @@ const PERCENT_UNIT_INDEX = 4;
 export const EDITOR_PREFERENCES = Object.freeze([
   { key: "guides", storeKey: "guides", defaultValue: true },
   { key: "showGrid", storeKey: "grid", defaultValue: false },
-  { key: "gridType", storeKey: "gtype", defaultValue: 0 },
+  {
+    key: "gridStyle",
+    storeKey: "gstyle",
+    defaultValue: 0,
+    // An index into GRID_STYLE_DASH_PATTERNS; a settings file naming a style
+    // this build does not have draws an unbroken line rather than nothing.
+    normalize: function (value) {
+      const styleIdx = Math.round(value);
+      if (!(styleIdx >= 0) || styleIdx >= GRID_STYLE_DASH_PATTERNS.length) return 0;
+      return styleIdx;
+    },
+  },
+  {
+    key: "gridColor",
+    storeKey: "gclr",
+    // Mid grey: the colour the grid was fixed at before it could be chosen.
+    defaultValue: 0x808080,
+    normalize: function (value) {
+      const packedRgb = Math.round(value);
+      if (!(packedRgb >= 0)) return 0;
+      return Math.min(0xffffff, packedRgb);
+    },
+  },
+  {
+    key: "gridSubdivisions",
+    storeKey: "gsubdiv",
+    defaultValue: 4,
+    // A count of the finer lines between two gridlines, so a whole number, and
+    // at least the one line that is the gridline itself.
+    normalize: function (value) {
+      const subdivisions = Math.round(value);
+      if (!(subdivisions >= GRID_SUBDIVISION_RANGE.min)) return GRID_SUBDIVISION_RANGE.min;
+      return Math.min(GRID_SUBDIVISION_RANGE.max, subdivisions);
+    },
+  },
   {
     key: "gridSize",
     storeKey: "gsize",

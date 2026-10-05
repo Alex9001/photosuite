@@ -15,6 +15,7 @@ let buildImportExtensionFilter;
 let adjustPresetActionIndex;
 let computeBlendIfSectionOffset;
 let normalizeSwatchPickColor;
+let lineStyleIconSource;
 let PopupButton;
 let ModeDropdown;
 let ButtonMenu;
@@ -38,6 +39,7 @@ before(async () => {
     adjustPresetActionIndex,
     computeBlendIfSectionOffset,
     normalizeSwatchPickColor,
+    lineStyleIconSource,
     PopupButton,
     ModeDropdown,
     ButtonMenu,
@@ -55,6 +57,13 @@ before(async () => {
 });
 
 describe("ui/widgets/controls/popup-controls.js", () => {
+  // The icon is drawn from the same dash pattern the line is stroked with, so
+  // the picker cannot end up showing a style the canvas does not draw.
+  it("lineStyleIconSource names a dash pattern, empty for a solid line", () => {
+    assert.equal(lineStyleIconSource([]), "line:");
+    assert.equal(lineStyleIconSource([4, 3]), "line:4,3");
+  });
+
   it("accumulateGroupBreakPositions goldens", () => {
     assert.deepEqual(accumulateGroupBreakPositions([3, 2]), [3, 5]);
     assert.deepEqual(accumulateGroupBreakPositions(null), []);

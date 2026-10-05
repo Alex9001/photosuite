@@ -6,8 +6,9 @@ import { KeyboardHandler } from "../../core/keyboard-handler.js";
 import { Locale } from "../../core/i18n/locale.js";
 import { PopupTypes } from "../config/popup-types.js";
 import { ThemeConfig } from "../config/theme-config.js";
-import { RangeInput } from "../widgets/controls/number-inputs.js";
-import { Dropdown } from "../widgets/controls/popup-controls.js";
+import { SliderDropdown } from "../widgets/controls/number-inputs.js";
+import { Dropdown, IconRenderer, lineStyleIconSource } from "../widgets/controls/popup-controls.js";
+import { NamedColorPicker } from "../widgets/controls/color-controls.js";
 import { Button, Checkbox, Label } from "../widgets/form-controls.js";
 import { BaseDialog } from "./base-dialog.js";
 import { EventType, UiCommand } from "../../core/event-bus.js";
@@ -15,11 +16,17 @@ import { addClass, appendBreak, appendHorizontalRule, escapeHtml, makeElement, r
 import { AppEvent } from "../../core/event-bus.js";
 import { UNIT_NAMES } from "../../engine/compositing/geometry.js";
 import {
+  GRID_STYLE_DASH_PATTERNS,
+  GRID_STYLE_LABEL_KEYS,
+  GRID_SUBDIVISION_RANGE,
   UI_FONT_SIZE_LABEL_KEYS,
   createDefaultEditorPrefs,
   normalizeEditorPrefs,
   readPrefValue,
 } from "../../core/editor-preferences.js";
+
+/** Width of the numeric fields, in em, so the values line up as one column. */
+const NUMBER_FIELD_WIDTH_EM = 4;
 
 const SHORTCUT_COLUMN_OPEN =
   "<div style=\"line-height:1.4em; column-count:3; column-gap:3em; column-rule-width:1px;\" class=\"\">";
@@ -45,9 +52,39 @@ function dropdown(labelKey, itemLabels) {
   };
 }
 
-function slider(labelKey, minValue, maxValue, unitSuffix, decimals) {
+/**
+ * A number typed into a field, the way Photoshop asks for a grid measurement —
+ * not a slider. The rows here are a column of labelled values, and a track wide
+ * enough to be worth dragging would be the one row that is not.
+ *
+ * The range is the whole domain rather than a comfortable part of it, so a
+ * typed value outside it is clamped.
+ */
+function numberField(labelKey, minValue, maxValue, decimals) {
   return function () {
-    return new RangeInput(labelKey, minValue, maxValue, unitSuffix, decimals);
+    return new SliderDropdown(labelKey, minValue, maxValue, null, decimals, false, true, NUMBER_FIELD_WIDTH_EM)
+      .limitToDeclaredRange();
+  };
+}
+
+function namedColor(labelKey) {
+  return function () {
+    return new NamedColorPicker(labelKey);
+  };
+}
+
+/**
+ * A line style picked from drawn samples rather than named ones — the icons are
+ * rasterized from the same dash patterns the grid is stroked with, so what the
+ * row shows is what the canvas does.
+ */
+function lineStyleIcons(labelKey) {
+  return function () {
+    const iconSources = [];
+    for (let styleIdx = 0; styleIdx < GRID_STYLE_DASH_PATTERNS.length; styleIdx++) {
+      iconSources.push(lineStyleIconSource(GRID_STYLE_DASH_PATTERNS[styleIdx]));
+    }
+    return new IconRenderer(labelKey, iconSources, GRID_STYLE_LABEL_KEYS.slice());
   };
 }
 
@@ -114,19 +151,23 @@ const PREFERENCE_SECTIONS = [
       {
         rows: [
           { pref: "showGrid", widget: checkbox("view.grid") },
-          {
-            pref: "gridType",
-            widget: dropdown("properties.gridType", [
-              "properties.shapeType.square",
-              "properties.isometric",
-            ]),
-          },
+          { pref: "gridColor", widget: namedColor("colour.title") },
+          { pref: "gridStyle", widget: lineStyleIcons("properties.style") },
           {
             pref: "gridSize",
-            widget: slider("properties.gridGap", 1, 100, null, 2),
+            widget: numberField("properties.gridGap", 1, 100, 2),
             // The gap and the unit it is counted in are one control, so they
             // share a row and the units read as belonging to the gap.
             trailing: { pref: "gridUnits", widget: dropdown(null, UNIT_NAMES) },
+          },
+          {
+            pref: "gridSubdivisions",
+            widget: numberField(
+              "properties.gridSubdivisions",
+              GRID_SUBDIVISION_RANGE.min,
+              GRID_SUBDIVISION_RANGE.max,
+              0,
+            ),
           },
         ],
       },
@@ -306,6 +347,9 @@ PreferencesDialog.prototype.buildLanguagePickerLabels = function() {
 PreferencesDialog.prototype.buildRowWidget = function(row) {
   if (row.control != null) return this.dialogOwnedWidgets[row.control];
   const widget = row.widget();
+  // A widget that opens a dialog of its own — the colour picker — dispatches
+  // through its parent chain, so the chain has to reach this dialog.
+  widget.parent = this;
   widget.on(EventType.widgetSelect, this.onPreferenceWidgetChange, this);
   this.widgetsByPrefKey[row.pref] = widget;
   return widget;
