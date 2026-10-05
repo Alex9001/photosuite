@@ -21,6 +21,7 @@ import { NavigatorPanel } from "../panels/navigator-panel.js";
 import { PathsPanel } from "../panels/paths-panel.js";
 import { PluginPanel } from "../panels/plugin-panel.js";
 import { resolveSidebarPluginPanelId } from "../../features/plugins/plugin-spec.js";
+import { isPanelVisibleInLayout } from "../../core/panel-layout.js";
 import { PropertiesPanel } from "../panels/properties-panel.js";
 import { SwatchesPanel } from "../panels/swatches-panel.js";
 import { ToolPresetsPanel } from "../panels/tool-presets-panel.js";
@@ -95,7 +96,16 @@ Object.defineProperties(RightSidebar, {
   }
 });
 
-RightSidebar.prototype.registerRuntimePlugins = function(pluginSpecs) {
+/**
+ * Register panels for plugins found at launch.
+ *
+ * A plugin panel opens by default — a plugin the user installed is one they
+ * want to see — unless the stored layout says they closed it last time.
+ *
+ * @param {object[]} pluginSpecs
+ * @param {import("../../core/panel-layout.js").PanelLayoutEntry[]} [storedPanelLayout]
+ */
+RightSidebar.prototype.registerRuntimePlugins = function(pluginSpecs, storedPanelLayout) {
   for (let pluginIdx = 0; pluginIdx < pluginSpecs.length; pluginIdx++) {
     const pluginSpec = pluginSpecs[pluginIdx];
     const pluginPanel = new PluginPanel(pluginSpec, resolveSidebarPluginPanelId(pluginSpec));
@@ -103,7 +113,9 @@ RightSidebar.prototype.registerRuntimePlugins = function(pluginSpecs) {
       panel: pluginPanel,
       columnIndex: 5
     });
-    this.dynamicPanelIds.push(pluginPanel.panelId);
+    if (isPanelVisibleInLayout(storedPanelLayout, pluginPanel.panelId, true)) {
+      this.dynamicPanelIds.push(pluginPanel.panelId);
+    }
   }
   this.redraw();
 };

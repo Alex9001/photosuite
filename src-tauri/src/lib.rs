@@ -465,6 +465,39 @@ fn photosuite_exit_app(app: tauri::AppHandle) {
     app.exit(0);
 }
 
+/// Smallest window we will restore to, mirroring `minWidth`/`minHeight` in
+/// tauri.conf.json. A stored size below this came from a corrupted settings
+/// file, not from a window the user actually had.
+const MIN_RESTORED_WINDOW_SIZE: f64 = 480.0;
+
+/// Resize the main window to a size stored from a previous session.
+///
+/// Size only, never position: a window restored onto a display that is no
+/// longer there is one the user cannot reach to fix.
+#[tauri::command]
+fn photosuite_set_window_size(app: tauri::AppHandle, width: f64, height: f64) -> Result<(), String> {
+    if !(width >= MIN_RESTORED_WINDOW_SIZE) || !(height >= MIN_RESTORED_WINDOW_SIZE) {
+        return Err(format!("refusing to restore a {width}x{height} window"));
+    }
+    let win = app
+        .get_webview_window("main")
+        .ok_or_else(|| "webview window \"main\" not found".to_string())?;
+    win.set_size(tauri::LogicalSize::new(width, height))
+        .map_err(|e| e.to_string())
+}
+
+/// The main window's current size, in logical pixels, for storing.
+#[tauri::command]
+fn photosuite_get_window_size(app: tauri::AppHandle) -> Result<(f64, f64), String> {
+    let win = app
+        .get_webview_window("main")
+        .ok_or_else(|| "webview window \"main\" not found".to_string())?;
+    let scale = win.scale_factor().map_err(|e| e.to_string())?;
+    let size = win.outer_size().map_err(|e| e.to_string())?;
+    let logical = size.to_logical::<f64>(scale);
+    Ok((logical.width, logical.height))
+}
+
 #[tauri::command]
 fn photosuite_emit_menu_action(
     app: tauri::AppHandle,
@@ -570,6 +603,8 @@ pub fn run() {
             photosuite_emit_menu_action,
             photosuite_install_native_menu,
             photosuite_exit_app,
+            photosuite_set_window_size,
+            photosuite_get_window_size,
             take_pending_open_files,
             printing::list_printers,
             printing::submit_print_job,

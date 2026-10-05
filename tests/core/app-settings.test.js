@@ -118,6 +118,99 @@ describe("contract: app-settings ↔ editor prefs", () => {
     }
   });
 
+  // Closing a panel is a setting. It used to live only in memory and reach the
+  // file by accident, when some later change happened to save — so closing a
+  // panel and quitting lost it.
+  /**
+   * A fresh module instance bound to a fresh store. `app-settings.js` memoises
+   * the store it opened, so tests that share the module see one another's.
+   */
+  async function freshSettingsModule(caseName) {
+    const mock = makeMockSettingsStore();
+    const restore = installTauriWindowMock({ load: () => Promise.resolve(mock.store) });
+    const module = await import("../../src/core/app-settings.js?case=" + caseName);
+    return { mock, restore, persistAppSettings: module.persistAppSettings };
+  }
+
+  it("writes which panels are open, including ones that are not", async () => {
+    const { mock, restore, persistAppSettings: persist } = await freshSettingsModule("panels");
+    const appController = makeMinimalAppController({
+      controller: {
+        getRegisteredPanelIds: () => [0, 1, 2, 7, "plg_ocr"],
+      },
+    });
+
+    try {
+      await persist(appController);
+      assert.deepEqual(mock.saved.panelLayout, [
+        { id: 0, visible: true },
+        { id: 1, visible: true },
+        { id: 2, visible: true },
+        { id: 7, visible: false },
+        { id: "plg_ocr", visible: false },
+      ]);
+    } finally {
+      restore();
+    }
+  });
+
+  it("keeps an entry for a panel this session does not have", async () => {
+    const { mock, restore, persistAppSettings: persist } = await freshSettingsModule("carry");
+    const appController = makeMinimalAppController({
+      appData: { storedPanelLayout: [{ id: "plg_uninstalled", visible: false }] },
+      controller: { getRegisteredPanelIds: () => [0, 1, 2] },
+    });
+
+    try {
+      await persist(appController);
+      assert.deepEqual(mock.saved.panelLayout.at(-1), { id: "plg_uninstalled", visible: false });
+    } finally {
+      restore();
+    }
+  });
+
+  // The window size and the editor state are unrelated, and the editor state is
+  // the part that broke on launch — restoring one must not be hostage to the
+  // other.
+  it("restores the window size even when applying the editor state throws", async () => {
+    const mock = makeMockSettingsStore();
+    mock.saved.windowSize = { width: 1100, height: 700 };
+    const invoked = [];
+    const previousWindow = globalThis.window;
+    globalThis.window = {
+      __TAURI__: {
+        store: { load: () => Promise.resolve(mock.store) },
+        core: { invoke: (cmd) => { invoked.push(cmd); return Promise.resolve(); } },
+      },
+    };
+    const { applyStoredSettingsOnStartup: applyStored } =
+      await import("../../src/core/app-settings.js?case=resilience");
+
+    try {
+      await applyStored({
+        appData: {},
+        applyPersistedAppState() { throw new TypeError("as it did on every launch"); },
+      });
+      assert.ok(invoked.includes("photosuite_set_window_size"), "the window size was never restored");
+    } finally {
+      globalThis.window = previousWindow;
+    }
+  });
+
+  it("writes the window size only once something has recorded one", async () => {
+    const { mock, restore, persistAppSettings: persist } = await freshSettingsModule("window");
+    try {
+      await persist(makeMinimalAppController());
+      assert.equal("windowSize" in mock.saved, false, "nothing should be written before a resize");
+
+      const sized = makeMinimalAppController({ appData: { windowSize: { width: 1200, height: 800 } } });
+      await persist(sized);
+      assert.deepEqual(mock.saved.windowSize, { width: 1200, height: 800 });
+    } finally {
+      restore();
+    }
+  });
+
   it("field map keys match snapshot output keys", () => {
     const snapshotKeys = Object.keys(
       snapshotEditorParamsFromPrefs(makeMinimalAppController().appData.prefs)

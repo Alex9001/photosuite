@@ -136,8 +136,8 @@ export async function loadDiscoveredSidebarPlugins() {
  * @param {*} rightSidebar
  * @param {object[]} pluginSpecs
  */
-export function registerDiscoveredSidebarPlugins(rightSidebar, pluginSpecs) {
+export function registerDiscoveredSidebarPlugins(rightSidebar, pluginSpecs, storedPanelLayout) {
   const pendingSpecs = filterUnregisteredSidebarPluginSpecs(rightSidebar, pluginSpecs);
   if (pendingSpecs.length === 0) return;
-  rightSidebar.registerRuntimePlugins(pendingSpecs);
+  rightSidebar.registerRuntimePlugins(pendingSpecs, storedPanelLayout);
 }

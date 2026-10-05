@@ -73,7 +73,7 @@ import {
 } from "./app-controller-ui-dispatch.js";
 import { applyToolHandlers } from "./app-controller-tools.js";
 import { applyKeyboardHandlers } from "./app-controller-keyboard.js";
-import { applyStoredSettingsOnStartup } from "../../core/app-settings.js";
+import { applyStoredSettingsOnStartup, captureWindowSize, persistAppSettings } from "../../core/app-settings.js";
 import {
   loadDiscoveredSidebarPlugins,
   registerDiscoveredSidebarPlugins
@@ -89,6 +89,7 @@ import {
 } from "../../core/recent-files.js";
 import { createMenuBarData } from "../menu/menu-bar-data.js";
 import { applyEditorParamsToPrefs, createDefaultEditorPrefs } from "../../core/editor-preferences.js";
+import { isPanelVisibleInLayout, visiblePanelIdsFromLayout } from "../../core/panel-layout.js";
 import { BrushPresetUtil } from "../../features/brush/brush-presets.js";
 import { EventType, UiCommand } from "../../core/event-bus.js";
 import { addClass, escapeHtml, isInDOM, makeElement } from "../../core/dom.js";
@@ -209,6 +210,63 @@ AppController.prototype.refreshNativeMenuBar = function() {
   });
 };
 
+/** Quiet period after a resize before the new window size is written. */
+const WINDOW_SIZE_SAVE_DELAY_MS = 800;
+
+/**
+ * Remember the window's size, once the user has stopped dragging its edge.
+ *
+ * A resize arrives as a burst of events, and each one would otherwise be a
+ * settings write, so the save waits for the drag to finish. Only the size is
+ * kept — restoring a position can put the window on a display that is no longer
+ * there, where the user cannot reach it to put it back.
+ */
+AppController.prototype.scheduleWindowSizeSave = function() {
+  if (!this.startupComplete) return;
+  const appController = this;
+  if (this.windowSizeSaveHandle != null) clearTimeout(this.windowSizeSaveHandle);
+  this.windowSizeSaveHandle = setTimeout(function() {
+    appController.windowSizeSaveHandle = null;
+    appController.flushWindowSizeSave().catch(function(err) {
+      console.warn("PhotoSuite: failed to save the window size", err);
+    });
+  }, WINDOW_SIZE_SAVE_DELAY_MS);
+};
+
+/**
+ * Record and write the window size now, cancelling any pending delayed save.
+ * Quitting calls this, so a resize followed straight away by a quit is still
+ * the size that comes back.
+ *
+ * @returns {Promise<void>}
+ */
+AppController.prototype.flushWindowSizeSave = function() {
+  if (this.windowSizeSaveHandle != null) {
+    clearTimeout(this.windowSizeSaveHandle);
+    this.windowSizeSaveHandle = null;
+  }
+  if (!this.startupComplete) return Promise.resolve();
+  const appController = this;
+  return captureWindowSize(appController).then(function() {
+    return persistAppSettings(appController);
+  });
+};
+
+/**
+ * Every panel id the sidebar has registered this session — built-ins and any
+ * plugin panels discovered at launch. What the stored layout is written against.
+ * @returns {Array<number|string>}
+ */
+AppController.prototype.getRegisteredPanelIds = function() {
+  const registryRows = RightSidebar.panelRegistry;
+  const panelIds = [];
+  for (let rowIdx = 0; rowIdx < registryRows.length; rowIdx++) {
+    const panel = registryRows[rowIdx] ? registryRows[rowIdx].panel : null;
+    if (panel && panel.panelId != null) panelIds.push(panel.panelId);
+  }
+  return panelIds;
+};
+
 AppController.prototype.refreshRecentFilesUi = function() {
   MenuBar.data = createMenuBarData(function getPanelRegistry() {
     return RightSidebar.panelRegistry;
@@ -259,7 +317,11 @@ AppController.prototype.runDeferredStartup = function() {
   }).then(function() {
     return loadDiscoveredSidebarPlugins();
   }).then(function(discoveredPlugins) {
-    registerDiscoveredSidebarPlugins(appController.rightSidebar, discoveredPlugins);
+    registerDiscoveredSidebarPlugins(
+      appController.rightSidebar,
+      discoveredPlugins,
+      appController.appData.storedPanelLayout,
+    );
   }).then(function() {
     MenuBar.data = createMenuBarData(function getPanelRegistry() {
       return RightSidebar.panelRegistry;
@@ -330,6 +392,7 @@ AppController.prototype.resize = function(widthPx, heightPx) {
   widthPx = Math.floor(widthPx);
   heightPx = Math.floor(heightPx);
   AppWindow.prototype.resize.call(this, widthPx, heightPx);
+  this.scheduleWindowSizeSave();
   // The chrome viewport clips what it holds, so it is measured from the bars
   // themselves — their heights and edges are set in the stylesheet.
   let chromeTopOffset = 0;
@@ -766,6 +829,8 @@ function createInitialAppData() {
     startupResourceStore: {
       storedFiles: {}
     },
+    /** The `panelLayout` read from settings, or null before it loads. */
+    storedPanelLayout: null,
     lastClipboardImageFileSize: 0,
     clipboardCopyRect: null,
     clipboardPixelPayload: null,
@@ -784,6 +849,18 @@ function applyPersistedFieldsToAppData(controller, persistedState) {
   if (persistedState.favFam != null) appData.favoriteFontFamilies = persistedState.favFam;
   if (persistedState.panels != null) {
     appData.effectRows = persistedState.panels.map(normalizePanelId);
+  }
+  if (persistedState.panelLayout != null) {
+    // Kept whole so a panel registering later — a plugin discovered during
+    // launch — can ask how it was left, and so the next save can carry forward
+    // entries for panels this session does not have.
+    appData.storedPanelLayout = persistedState.panelLayout;
+    const knownPanelIds = controller.getRegisteredPanelIds();
+    appData.effectRows = visiblePanelIdsFromLayout(
+      persistedState.panelLayout,
+      knownPanelIds,
+      appData.effectRows,
+    ).map(normalizePanelId);
   }
   if (persistedState.eparams) {
     applyEditorParamsToPrefs(appData.prefs, persistedState.eparams);

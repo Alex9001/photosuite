@@ -114,6 +114,43 @@ describe("ui/shell/app-controller.js", () => {
     assert.equal(ref.qb, undefined);
   });
 
+  // Restoring the layout reads the registered panels off the controller. It was
+  // written as `this.getRegisteredPanelIds()` inside a plain function that is
+  // handed the controller, so every launch threw and no stored setting applied.
+  describe("applyPersistedAppState", () => {
+    function layoutController(registeredPanelIds) {
+      const controller = Object.create(AppController.prototype);
+      controller.appData = { effectRows: [0, 1, 2], prefs: {}, storedPanelLayout: null };
+      controller.getRegisteredPanelIds = () => registeredPanelIds;
+      return controller;
+    }
+
+    it("opens the panels the stored layout says, and keeps the rest closed", () => {
+      const controller = layoutController([0, 1, 2]);
+      controller.applyPersistedAppState({
+        panelLayout: [
+          { id: 0, visible: true },
+          { id: 1, visible: false },
+          { id: 2, visible: true },
+        ],
+      });
+      assert.deepEqual(controller.appData.effectRows, [0, 2]);
+    });
+
+    it("keeps the layout whole for panels that register later", () => {
+      const controller = layoutController([0]);
+      const layout = [{ id: 0, visible: true }, { id: "plg_ocr", visible: false }];
+      controller.applyPersistedAppState({ panelLayout: layout });
+      assert.deepEqual(controller.appData.storedPanelLayout, layout);
+    });
+
+    it("falls back to the older panels key when there is no layout", () => {
+      const controller = layoutController([0, 1, 2]);
+      controller.applyPersistedAppState({ panels: [1, 2] });
+      assert.deepEqual(controller.appData.effectRows, [1, 2]);
+    });
+  });
+
   // WebKitGTK gives the paste event no image data for a picture copied in
   // another application, so on Linux a keyboard paste fell through to whatever
   // the internal clipboard still held — the image pasted the time before.
