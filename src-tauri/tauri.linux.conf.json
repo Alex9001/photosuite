@@ -7,6 +7,11 @@
       },
       "rpm": {
         "depends": ["cups-libs"]
+      },
+      "appimage": {
+        "files": {
+          "/usr/share/metainfo/app.photosuite.PhotoSuite.metainfo.xml": "../packaging/linux/app.photosuite.PhotoSuite.metainfo.xml"
+        }
       }
     }
   }

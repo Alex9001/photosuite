@@ -195,7 +195,7 @@ jobs:
       # `--target` is a tauri flag; putting it after `--` would hand it to cargo
       # and leave the bundler looking in the wrong target directory.
       - name: Tauri build
-        run: npx tauri build ${{ matrix.tauri_args }}
+        run: npx tauri build ${{ matrix.tauri_args }} -- --locked
 
       - name: Upload ${{ matrix.artifact }}
         uses: actions/upload-artifact@v7
@@ -274,7 +274,7 @@ jobs:
       # The frontend is embedded into the binary by tauri::generate_context!, so
       # everything the bundlers need is in this one file.
       - name: Tauri build (no bundle)
-        run: npx tauri build --no-bundle
+        run: npx tauri build --no-bundle -- --locked
 
       - name: Upload linux-binary-${{ matrix.arch }}
         uses: actions/upload-artifact@v7
@@ -393,7 +393,9 @@ jobs:
           case "${{ matrix.format }}" in
             rpm) packages+=(rpm) ;;
             flatpak) packages+=(flatpak flatpak-builder) ;;
-            appimage) packages+=(zsync) ;;
+            # scripts/verify-appimage.sh validates the desktop entry and the
+            # AppStream metadata, and rebuilds the image from its own .zsync.
+            appimage) packages+=(zsync desktop-file-utils appstream) ;;
           esac
 
           sudo apt-get install --no-install-recommends -y "${packages[@]}"
@@ -423,34 +425,34 @@ jobs:
       - name: Restore the executable bit
         run: chmod +x src-tauri/target/release/photosuite
 
+      # linuxdeploy-plugin-appimage reads this and hands appimagetool `-u`, which
+      # both embeds the update information in the AppImage and writes the .zsync
+      # control file beside it. Doing it this way rather than running zsyncmake
+      # afterwards is what makes delta updates discoverable: the
+      # `gh-releases-zsync` transport resolves the newest published release
+      # through the GitHub API, so the channel does not go stale when the
+      # version in the filename changes.
+      #
+      # The filename is a glob because it carries the version; it has to match
+      # the asset the release actually publishes, which
+      # scripts/verify-appimage.sh asserts.
+      - name: Point the AppImage update channel at the latest release
+        if: matrix.format == 'appimage'
+        run: |
+          set -euo pipefail
+          owner="${GITHUB_REPOSITORY%/*}"
+          repository="${GITHUB_REPOSITORY#*/}"
+          echo "LDAI_UPDATE_INFORMATION=gh-releases-zsync|$owner|$repository|latest|PhotoSuite_*_amd64.AppImage.zsync" \
+            >> "$GITHUB_ENV"
+
       # `tauri bundle` reuses the binary that `tauri build --no-bundle` left in
       # the target directory rather than compiling again.
       - name: Tauri bundle (${{ matrix.bundles }})
         run: npx tauri bundle -b ${{ matrix.bundles }}
 
-      # linuxdeploy emits the .AppImage only, so the .zsync control file that
-      # AppImageUpdate reads for delta updates is generated here from the
-      # finished bundle. zsyncmake records the download URL inside the .zsync,
-      # so it has to name the release asset this AppImage will be published as
-      # -- which is why the URL is built from the tag rather than hardcoded.
-      #
-      # On a workflow_dispatch run there is no tag and nothing is published, so
-      # the URL baked in points at a ref that may not exist. The .zsync is still
-      # produced, since the artifact is only there to be inspected.
-      - name: Generate AppImage zsync file
+      - name: Verify AppImage
         if: matrix.format == 'appimage'
-        run: |
-          set -euo pipefail
-          cd src-tauri/target/release/bundle/appimage
-
-          appimage=$(ls *.AppImage)
-          url="https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/$appimage"
-
-          # -u is the URL clients re-fetch from; -o keeps the conventional
-          # <bundle>.AppImage.zsync name that AppImageUpdate expects.
-          zsyncmake -u "$url" -o "$appimage.zsync" "$appimage"
-
-          echo "Wrote $appimage.zsync pointing at $url"
+        run: bash scripts/verify-appimage.sh src-tauri/target/release/bundle/appimage
 
       - name: Build Flatpak bundle
         if: matrix.format == 'flatpak'

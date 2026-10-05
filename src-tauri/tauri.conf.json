@@ -35,6 +35,8 @@
       "app"
     ],
     "category": "Photography",
+    "homepage": "https://github.com/eolix/photosuite",
+    "shortDescription": "Layered image editor with native PSD and PSB support",
     "resources": {
       "../LICENSE": "LICENSE",
       "../THIRD-PARTY-NOTICES.md": "THIRD-PARTY-NOTICES.md"
