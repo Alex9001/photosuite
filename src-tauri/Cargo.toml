@@ -17,7 +17,10 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = ["macos-private-api", "image-png"] }
 tauri-plugin-shell = "2"
 tauri-plugin-fs = "2"
-tauri-plugin-dialog = "2"
+# On Linux, use xdg-desktop-portal rather than rfd's GTK3 backend.  The portal
+# delegates to the active desktop's file chooser (KDE, GNOME, etc.); it has no
+# effect on the plugin's native Windows and macOS backends.
+tauri-plugin-dialog = { version = "2", default-features = false, features = ["xdg-portal"] }
 tauri-plugin-clipboard-manager = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
