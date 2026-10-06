@@ -255,15 +255,189 @@ describe("URL loading", () => {
     } finally { window.__TAURI__ = oldTauri; FileLoader.processLoadedBytes = oldProcessor; installToastPainter(null); }
   });
 
-  it("routes encoded file URLs to the filesystem loader", () => {
+  function installNativeUrlHarness(invoke) {
+    const oldTauri = window.__TAURI__;
     const oldProcessor = FileLoader.processLoadedBytes;
-    const loader = new FileLoader(() => {});
-    let opened;
-    loader.openFileByPath = (...args) => { opened = args; };
+    const oldFileReader = globalThis.FileReader;
+    const opened = [];
+    const loader = new FileLoader((spec, bytes, emitter, channelRasterCallback) => {
+      opened.push({ spec, bytes, emitter, channelRasterCallback });
+      return false;
+    });
+    let busy = 0;
+    loader._setOpenBusy = on => { busy += on ? 1 : -1; };
+    window.__TAURI__ = { core: { invoke } };
+    // Exercise the former native-path bridge too, so these regressions fail
+    // for lost metadata and incorrect destinations rather than a missing API.
+    globalThis.FileReader = class FileReader {
+      readAsArrayBuffer(file) {
+        file.arrayBuffer().then(bytes => {
+          this.result = bytes;
+          this.onload({ target: this });
+        });
+      }
+    };
+    return {
+      loader,
+      opened,
+      busy: () => busy,
+      restore() {
+        window.__TAURI__ = oldTauri;
+        FileLoader.processLoadedBytes = oldProcessor;
+        globalThis.FileReader = oldFileReader;
+      },
+    };
+  }
+
+  it("preserves file URL metadata and the decoded native save path", async () => {
+    const bytes = new ArrayBuffer(4), calls = [];
+    const harness = installNativeUrlHarness(async (command, args) => {
+      calls.push({ command, args });
+      return bytes;
+    });
+    const spec = {
+      url: " file:///media/Website%20PSD/home%20page.psd ",
+      placeIntoDocIndex: 2,
+      insertLayerIndex: 3,
+      scriptHostData: { startupScript: "runFirst();", hostServer: "https://host.test" },
+      parentDocRef: { id: "parent" },
+    };
     try {
-      loader.enqueueUrlLoad({ url: "file:///media/Website%20PSD/home.psd", placeIntoDocIndex: null });
-      assert.deepEqual(opened, ["/media/Website PSD/home.psd", null, null]);
-      assert.equal(loader.pendingLoadSpecs.length, 0);
-    } finally { FileLoader.processLoadedBytes = oldProcessor; }
+      await harness.loader.enqueueUrlLoad(spec);
+      await new Promise(resolve => setImmediate(resolve));
+      assert.deepEqual(calls, [{ command: "read_file_raw", args: { path: "/media/Website PSD/home page.psd" } }]);
+      assert.equal(harness.opened.length, 1);
+      assert.equal(harness.opened[0].spec, spec, "the original import metadata must reach the processor");
+      assert.equal(spec.url, "file:///media/Website%20PSD/home%20page.psd");
+      assert.equal(spec.name, "home page.psd");
+      assert.equal(spec.nativeFilePath, "/media/Website PSD/home page.psd");
+      assert.equal(spec.placeIntoDocIndex, 2);
+      assert.equal(spec.insertLayerIndex, 3);
+      assert.equal(spec.scriptHostData.startupScript, "runFirst();");
+      assert.equal(spec.parentDocRef.id, "parent");
+      assert.equal(harness.opened[0].bytes, bytes);
+      assert.equal(harness.opened[0].emitter, harness.loader);
+      assert.equal(harness.opened[0].channelRasterCallback, null);
+      assert.equal(harness.busy(), 0);
+    } finally { harness.restore(); }
+  });
+
+  it("queues file URLs without mixing their target document indexes", async () => {
+    const reads = new Map(), paths = [];
+    const harness = installNativeUrlHarness((_command, args) => {
+      paths.push(args.path);
+      return new Promise(resolve => reads.set(args.path, resolve));
+    });
+    const firstSpec = { url: "file:///tmp/first.psd", placeIntoDocIndex: 2 };
+    const secondSpec = { url: "file:///tmp/second.psd", placeIntoDocIndex: 7 };
+    try {
+      harness.loader.enqueueUrlLoad(firstSpec);
+      harness.loader.enqueueUrlLoad(secondSpec);
+      const initiallyRequested = paths.slice();
+      reads.get("/tmp/first.psd")(new ArrayBuffer(4));
+      await new Promise(resolve => setImmediate(resolve));
+      const busyDuringSecondRead = harness.busy();
+      reads.get("/tmp/second.psd")(new ArrayBuffer(4));
+      await new Promise(resolve => setImmediate(resolve));
+      assert.deepEqual(initiallyRequested, ["/tmp/first.psd"], "only the first queued read should start");
+      assert.deepEqual(harness.opened.map(open => open.spec.placeIntoDocIndex), [2, 7]);
+      assert.deepEqual(harness.opened.map(open => open.spec), [firstSpec, secondSpec]);
+      assert.equal(busyDuringSecondRead, 1);
+      assert.equal(harness.busy(), 0);
+      assert.equal(harness.loader.urlLoadInProgress, false);
+      assert.equal(harness.loader.pendingLoadSpecs.length, 0);
+    } finally { harness.restore(); }
+  });
+
+  it("reports failed native URL reads and continues to the next HTTP URL", async () => {
+    let rejectFirst;
+    const calls = [], messages = [];
+    const harness = installNativeUrlHarness((command, args) => {
+      calls.push({ command, args });
+      return command === "read_file_raw"
+        ? new Promise((_resolve, reject) => { rejectFirst = reject; })
+        : Promise.resolve(new ArrayBuffer(4));
+    });
+    installToastPainter(message => messages.push(message));
+    try {
+      const first = harness.loader.enqueueUrlLoad({ url: "file:///tmp/missing.psd" });
+      harness.loader.enqueueUrlLoad({ url: "https://example.test/next.psd" });
+      rejectFirst(new Error("Permission denied"));
+      await first;
+      await new Promise(resolve => setImmediate(resolve));
+      assert.deepEqual(calls.map(call => call.command), ["read_file_raw", "read_url_raw"]);
+      assert.deepEqual(harness.opened.map(open => open.spec.url), ["https://example.test/next.psd"]);
+      assert.match(messages[0], /Could not open the file URL.*Permission denied/);
+      assert.equal(harness.busy(), 0);
+      assert.equal(harness.loader.urlLoadInProgress, false);
+    } finally { harness.restore(); installToastPainter(null); }
+  });
+
+  it("retains Windows, UNC, and localhost file URL path handling", async () => {
+    const paths = [];
+    const harness = installNativeUrlHarness(async (_command, args) => {
+      paths.push(args.path);
+      return new ArrayBuffer(4);
+    });
+    try {
+      for (const url of [
+        "file:///C:/My%20Files/home.psd",
+        "file://server/share/home.psd",
+        "file://localhost/tmp/home.psd",
+      ]) {
+        await harness.loader.enqueueUrlLoad({ url });
+      }
+      assert.deepEqual(paths, ["C:/My Files/home.psd", "//server/share/home.psd", "/tmp/home.psd"]);
+      assert.deepEqual(harness.opened.map(open => open.spec.nativeFilePath), paths);
+      assert.deepEqual(harness.opened.map(open => open.spec.name), ["home.psd", "home.psd", "home.psd"]);
+      assert.equal(harness.busy(), 0);
+    } finally { harness.restore(); }
+  });
+
+  it("leaves the veil owned by a pending native file decode while advancing the queue", async () => {
+    const harness = installNativeUrlHarness(async () => new ArrayBuffer(4));
+    let finishDecode;
+    FileLoader.processLoadedBytes = (spec, _bytes, loader) => {
+      if (!spec.url.startsWith("file:")) return false;
+      finishDecode = () => loader.hideOpenVeil();
+      return true;
+    };
+    try {
+      const first = harness.loader.enqueueUrlLoad({ url: "file:///tmp/deferred.psd" });
+      harness.loader.enqueueUrlLoad({ url: "https://example.test/next.psd" });
+      await first;
+      await new Promise(resolve => setImmediate(resolve));
+      assert.equal(harness.loader.urlLoadInProgress, false);
+      assert.equal(harness.loader.pendingLoadSpecs.length, 0);
+      assert.equal(harness.busy(), 1, "download completion must not release the decoder's veil");
+      finishDecode();
+      assert.equal(harness.busy(), 0);
+    } finally { harness.restore(); }
+  });
+
+  it("keeps HTTP and data URLs on the browser path without a native host", async () => {
+    const oldXhr = globalThis.XMLHttpRequest;
+    const requests = [], bytes = new ArrayBuffer(4);
+    const harness = installNativeUrlHarness(() => { throw new Error("Unexpected native read"); });
+    window.__TAURI__ = undefined;
+    globalThis.XMLHttpRequest = class XMLHttpRequest {
+      constructor() { this.headers = {}; requests.push(this); }
+      open(method, url) { this.method = method; this.url = url; }
+      setRequestHeader(name, value) { this.headers[name] = value; }
+      send() { this.status = 200; this.response = bytes; this.onload(); }
+    };
+    try {
+      await harness.loader.enqueueUrlLoad({
+        url: "https://example.test/template.psd",
+        requestHeaders: { Authorization: "Bearer test" },
+      });
+      await harness.loader.enqueueUrlLoad({ url: "data:image/png;base64,AAAA" });
+      assert.deepEqual(requests.map(request => request.url), ["https://example.test/template.psd", "data:image/png;base64,AAAA"]);
+      assert.deepEqual(requests[0].headers, { Authorization: "Bearer test" });
+      assert.ok(requests.every(request => request.method === "GET" && request.responseType === "arraybuffer" && request.timeout === 120000));
+      assert.equal(harness.opened.length, 2);
+      assert.ok(harness.opened.every(open => open.bytes === bytes));
+      assert.equal(harness.busy(), 0);
+    } finally { harness.restore(); globalThis.XMLHttpRequest = oldXhr; }
   });
 });

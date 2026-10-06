@@ -44,6 +44,20 @@ export function installTauriMenuActionBridge(options) {
     return function() {};
   }
 
+  let disposed = false;
+  const unlistenFns = [];
+
+  // Registration crosses IPC. A disposer may run before listen resolves, so
+  // late registrations must be removed instead of reviving an old bridge.
+  function keepUnlisten(unlisten) {
+    if (disposed) {
+      unlisten();
+      return false;
+    }
+    unlistenFns.push(unlisten);
+    return true;
+  }
+
   function handleMenuPayload(payload) {
     handleMenuActionPayload(payload, getMenuData, dispatchTarget);
   }
@@ -53,22 +67,19 @@ export function installTauriMenuActionBridge(options) {
   }
 
   const unlistenMenuPromise = tauri.event.listen(PHOTOSUITE_MENU_ACTION_EVENT, function(ev) {
-    handleMenuPayload(ev.payload);
+    if (!disposed) handleMenuPayload(ev.payload);
   });
-  unlistenMenuPromise.then(function(unlisten) {
-    dispatchTarget._photosuiteTauriMenuUnlisten = unlisten;
-  }).catch(function() {});
+  unlistenMenuPromise.then(keepUnlisten).catch(function() {});
 
   const unlistenChromePromise = tauri.event.listen(PHOTOSUITE_CHROME_EVENT, function(ev) {
-    handleChromePayload(ev.payload);
+    if (!disposed) handleChromePayload(ev.payload);
   });
-  unlistenChromePromise.then(function(unlisten) {
-    dispatchTarget._photosuiteTauriChromeUnlisten = unlisten;
-  }).catch(function() {});
+  unlistenChromePromise.then(keepUnlisten).catch(function() {});
 
   // The shell holds the window open until the exit flow prompts for unsaved
   // work and invokes the exit command back on the shell.
   const unlistenQuitPromise = tauri.event.listen(PHOTOSUITE_QUIT_REQUEST_EVENT, function(ev) {
+    if (disposed) return;
     dispatchMenuActionDescriptor(dispatchTarget, {
       appEventType: EventType.uiDispatch,
       payload: { dispatchKind: UiCommand.exitApplication }
@@ -79,14 +90,14 @@ export function installTauriMenuActionBridge(options) {
     }
   });
   unlistenQuitPromise.then(function(unlisten) {
-    dispatchTarget._photosuiteTauriQuitUnlisten = unlisten;
-    if (tauri.core) return tauri.core.invoke("photosuite_quit_ready");
+    if (keepUnlisten(unlisten) && tauri.core) return tauri.core.invoke("photosuite_quit_ready");
   }).catch(function(err) { console.warn("PhotoSuite: quit listener installation failed", err); });
 
   return function() {
-    clearMenuActionUnlisten(dispatchTarget);
-    clearChromeUnlisten(dispatchTarget);
-    clearQuitRequestUnlisten(dispatchTarget);
+    if (disposed) return;
+    disposed = true;
+    for (let i = 0; i < unlistenFns.length; i++) unlistenFns[i]();
+    unlistenFns.length = 0;
   };
 }
 
@@ -159,26 +170,5 @@ function applyChromePayload(payload) {
     if (typeof window !== "undefined") {
       window.dispatchEvent(new Event("resize"));
     }
-  }
-}
-
-function clearMenuActionUnlisten(dispatchTarget) {
-  if (typeof dispatchTarget._photosuiteTauriMenuUnlisten === "function") {
-    dispatchTarget._photosuiteTauriMenuUnlisten();
-    dispatchTarget._photosuiteTauriMenuUnlisten = null;
-  }
-}
-
-function clearChromeUnlisten(dispatchTarget) {
-  if (typeof dispatchTarget._photosuiteTauriChromeUnlisten === "function") {
-    dispatchTarget._photosuiteTauriChromeUnlisten();
-    dispatchTarget._photosuiteTauriChromeUnlisten = null;
-  }
-}
-
-function clearQuitRequestUnlisten(dispatchTarget) {
-  if (typeof dispatchTarget._photosuiteTauriQuitUnlisten === "function") {
-    dispatchTarget._photosuiteTauriQuitUnlisten();
-    dispatchTarget._photosuiteTauriQuitUnlisten = null;
   }
 }

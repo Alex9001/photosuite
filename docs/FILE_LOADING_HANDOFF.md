@@ -70,3 +70,37 @@ folder. Temporary desktop smoke scripts and logs were kept under
 
 A locally tested AppImage was installed at the user's existing launcher path,
 with the original backed up. No GitHub release or upstream PR was created.
+
+## Follow-up review: 6 October 2026
+
+The follow-up branch retains `d8804fd` as its parent, including all original
+file-loading, AppImage dialog and quit fixes. Two focused corrections were added:
+
+- Native `file://` imports now use the existing URL-load queue and carry the
+  original import specification through to decoding. This preserves startup
+  scripts, host-server metadata, parent documents, insertion indexes and source
+  URLs. It also avoids the file picker's shared target-index race: two imports
+  targeting documents 2 and 7 previously arrived at 7 and no target instead.
+  Native filesystem paths and decoded names are kept for Save and recent files.
+- Tauri menu/quit listeners are owned by the bridge that installed them.
+  Disposing a bridge removes registrations that resolve later, ignores already
+  queued events, and cannot remove a newer bridge's listeners. A disposed quit
+  callback no longer acknowledges a request that needs native recovery.
+
+Regression tests reproduced the metadata loss, concurrent-read target race and
+hidden native-read failure before the file-loader change. Three bridge lifecycle
+tests also failed on the original code and passed after the correction.
+
+The JavaScript checks can run without a native host. Native Rust tests, GUI
+smoke tests, and installer builds were not rerun in this follow-up environment:
+it has no Rust toolchain, and submodule initialization was blocked by a network
+restriction. The HEIC decode sample test is skipped when its submodule fixture
+is absent. The earlier native validation above describes the original commit's
+separate Linux environment, not this follow-up.
+
+Upstream's only branch was rechecked during review. Its `main` is an unrelated
+history rooted at `a0a5b40` ("Audit start"), followed by `186cf6a`, and currently
+contains only the audit notice, licensing documents and logo. There is no
+application-source base for a clean upstream PR. Keep this patch on the fork
+until the maintainer restores or names a compatible source branch; do not merge
+unrelated histories or propose restoring the removed source as part of this fix.

@@ -202,3 +202,81 @@ describe("quit handshake", () => {
     } finally { window.__TAURI__ = old; }
   });
 });
+
+describe("menu bridge disposal", () => {
+  it("removes late listener registrations without enabling quit interception", async () => {
+    const old = window.__TAURI__;
+    const registrations = [];
+    const removed = [];
+    const invoked = [];
+    window.__TAURI__ = {
+      core: { invoke: async (command) => invoked.push(command) },
+      event: { listen: (name) => new Promise(resolve => {
+        registrations.push(() => resolve(() => removed.push(name)));
+      }) },
+    };
+    try {
+      const dispose = installTauriMenuActionBridge({ getMenuData: () => [], dispatchTarget: {} });
+      dispose();
+      for (const register of registrations) register();
+      await Promise.resolve();
+      dispose();
+      assert.deepEqual(removed, [
+        "photosuite:menu-action", "photosuite:chrome", "photosuite:quit-requested",
+      ]);
+      assert.deepEqual(invoked, [], "a disposed quit listener must never announce readiness");
+    } finally { window.__TAURI__ = old; }
+  });
+
+  it("ignores queued events after disposal, including quit acknowledgements", async () => {
+    const old = window.__TAURI__;
+    const classes = installBodyClassList();
+    const listeners = {};
+    const calls = [];
+    window.__TAURI__ = {
+      core: { invoke: async (command) => calls.push(command) },
+      event: { listen: async (name, handler) => {
+        listeners[name] = handler;
+        return () => {};
+      } },
+    };
+    try {
+      const dispose = installTauriMenuActionBridge({ getMenuData: () => [], dispatchTarget: {
+        dispatch: () => calls.push("dispatch"),
+      } });
+      await Promise.resolve();
+      assert.deepEqual(calls, ["photosuite_quit_ready"]);
+      dispose();
+      calls.length = 0;
+      listeners["photosuite:menu-action"]({ payload: {
+        action: { appEventType: EventType.uiDispatch, payload: {} },
+      } });
+      listeners["photosuite:chrome"]({ payload: { hideHtmlMenuBar: true } });
+      listeners["photosuite:quit-requested"]({ payload: { requestId: 9 } });
+      assert.deepEqual(calls, [], "stale quit callbacks must leave native recovery active");
+      assert.equal(classes.has("photosuite-hide-html-menu"), false);
+    } finally { window.__TAURI__ = old; }
+  });
+
+  it("only removes its own listeners when the same target gets another bridge", async () => {
+    const old = window.__TAURI__;
+    const removed = [];
+    let listenerId = 0;
+    window.__TAURI__ = { event: { listen: async () => {
+      const id = listenerId++;
+      return () => removed.push(id);
+    } } };
+    try {
+      const options = { getMenuData: () => [], dispatchTarget: {} };
+      const disposeFirst = installTauriMenuActionBridge(options);
+      await Promise.resolve();
+      const disposeSecond = installTauriMenuActionBridge(options);
+      await Promise.resolve();
+      disposeFirst();
+      disposeFirst();
+      assert.deepEqual(removed, [0, 1, 2]);
+      disposeSecond();
+      assert.deepEqual(removed, [0, 1, 2, 3, 4, 5]);
+    } finally { window.__TAURI__ = old; }
+  });
+});

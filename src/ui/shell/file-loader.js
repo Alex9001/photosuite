@@ -221,18 +221,6 @@ FileLoader.prototype._setOpenBusy = function(on) {
 
 FileLoader.prototype.enqueueUrlLoad = function(loadSpec) {
   loadSpec.url = String(loadSpec.url || "").trim();
-  if (/^file:/i.test(loadSpec.url)) {
-    try {
-      const url = new URL(loadSpec.url);
-      let path = decodeURIComponent(url.pathname);
-      if (/^\/[a-z]:\//i.test(path)) path = path.slice(1);
-      if (url.hostname && url.hostname !== "localhost") path = "//" + url.hostname + path;
-      this.openFileByPath(path, null, loadSpec.placeIntoDocIndex);
-    } catch (err) {
-      showToast("Could not open the file URL: " + String(err), 1e4);
-    }
-    return;
-  }
   this.pendingLoadSpecs.push(loadSpec);
   return this.processNextUrlLoad()
 };
@@ -244,18 +232,33 @@ FileLoader.prototype.processNextUrlLoad = async function() {
   const loadSpec = pendingSpecs.shift();
   this.showOpenVeil();
   if (loadSpec.scriptHostData == null) loadSpec.scriptHostData = {};
+  const isFileUrl = /^file:/i.test(loadSpec.url);
   let decodePending = false;
   try {
     const tauri = typeof window !== "undefined" ? window.__TAURI__ : null;
-    const bytes = tauri && tauri.core && /^https?:/i.test(loadSpec.url)
-      ? await tauri.core.invoke("read_url_raw", {
+    const hasNativeHost = tauri && tauri.core && typeof tauri.core.invoke === "function";
+    let bytes;
+    if (hasNativeHost && isFileUrl) {
+      const url = new URL(loadSpec.url);
+      let path = decodeURIComponent(url.pathname);
+      if (/^\/[a-z]:\//i.test(path)) path = path.slice(1);
+      if (url.hostname && url.hostname !== "localhost") path = "//" + url.hostname + path;
+      // Keep the original import context and queue position. Routing through
+      // the file picker would discard metadata and share its target index.
+      loadSpec.nativeFilePath = path;
+      if (!loadSpec.name) loadSpec.name = basenameFromNativePath(path);
+      bytes = await tauri.core.invoke("read_file_raw", { path: path });
+    } else if (hasNativeHost && /^https?:/i.test(loadSpec.url)) {
+      bytes = await tauri.core.invoke("read_url_raw", {
         url: loadSpec.url, requestHeaders: loadSpec.requestHeaders || null
-      })
-      : await readBrowserUrl(loadSpec);
+      });
+    } else {
+      bytes = await readBrowserUrl(loadSpec);
+    }
     decodePending = FileLoader.processLoadedBytes(loadSpec, bytes, this, null);
   } catch (err) {
     console.error("[file-load] URL open failed:", err);
-    showToast("Could not open the URL: " + String(err), 1e4);
+    showToast("Could not open the " + (isFileUrl ? "file URL" : "URL") + ": " + String(err), 1e4);
   } finally {
     if (!decodePending) this.hideOpenVeil();
     this.urlLoadInProgress = false;
