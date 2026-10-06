@@ -347,3 +347,36 @@ describe("ui/shell/app-controller-ui-dispatch.js", () => {
     });
   });
 });
+
+describe("quit settings save", () => {
+  it("does not trap quit on a synchronous settings error", async () => {
+    const { saveWindowSizeBeforeQuit } = await import("../../../src/ui/shell/app-controller-ui-dispatch.js");
+    await saveWindowSizeBeforeQuit({ flushWindowSizeSave() { throw new Error("store unavailable"); } });
+  });
+
+  it("bounds a settings save that never settles", async (t) => {
+    const { saveWindowSizeBeforeQuit } = await import("../../../src/ui/shell/app-controller-ui-dispatch.js");
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const pending = saveWindowSizeBeforeQuit({ flushWindowSizeSave: () => new Promise(() => {}) });
+    t.mock.timers.tick(1500);
+    await pending;
+  });
+
+  it("uses the async desktop confirmation even if WebKit confirm silently returns false", async () => {
+    const old = window.__TAURI__;
+    let nativeAsked = false;
+    installWebviewConfirm(() => { throw new Error("WebKit confirm must not be used"); });
+    window.__TAURI__ = { core: { invoke: async (command) => {
+      assert.equal(command, "confirm_dialog");
+      nativeAsked = true;
+      return true;
+    } } };
+    try {
+      assert.equal(await new Promise(resolve => promptConfirmUser("Discard?", {}, resolve)), true);
+      assert.equal(nativeAsked, true);
+    } finally {
+      window.__TAURI__ = old;
+      installWebviewConfirm(null);
+    }
+  });
+});

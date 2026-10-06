@@ -200,3 +200,70 @@ describe("ui/shell/file-loader.js deferred parser open", () => {
     });
   });
 });
+
+describe("URL loading", () => {
+  it("downloads HTTP URLs in the native host and preserves import options", async () => {
+    const oldTauri = window.__TAURI__;
+    const oldProcessor = FileLoader.processLoadedBytes;
+    const bytes = new Uint8Array([56, 66, 80, 83]).buffer;
+    const spec = { url: " https://example.test/template.psd ", placeIntoDocIndex: 2, requestHeaders: { Authorization: "Bearer test" } };
+    const loader = new FileLoader((loadedSpec, loadedBytes, emitter) => {
+      assert.equal(loadedSpec, spec);
+      assert.equal(loadedBytes, bytes);
+      assert.equal(emitter, loader);
+      assert.equal(loadedSpec.placeIntoDocIndex, 2);
+      return false;
+    });
+    let busy = 0;
+    loader.showOpenVeil = () => busy++;
+    loader.hideOpenVeil = () => busy--;
+    window.__TAURI__ = { core: { invoke: async (command, args) => {
+      assert.equal(command, "read_url_raw");
+      assert.deepEqual(args, { url: "https://example.test/template.psd", requestHeaders: spec.requestHeaders });
+      return bytes;
+    } } };
+    try {
+      await loader.enqueueUrlLoad(spec);
+      assert.equal(busy, 0);
+      assert.equal(loader.urlLoadInProgress, false);
+    } finally { window.__TAURI__ = oldTauri; FileLoader.processLoadedBytes = oldProcessor; }
+  });
+
+  it("reports failed downloads and continues with the next queued file", async () => {
+    const oldTauri = window.__TAURI__;
+    const oldProcessor = FileLoader.processLoadedBytes;
+    const opened = [], messages = [];
+    let rejectFirst;
+    const loader = new FileLoader(spec => { opened.push(spec.url); return false; });
+    let busy = 0;
+    loader.showOpenVeil = () => busy++;
+    loader.hideOpenVeil = () => busy--;
+    installToastPainter(message => messages.push(message));
+    window.__TAURI__ = { core: { invoke: (_command, args) => args.url.endsWith("missing.psd")
+      ? new Promise((_resolve, reject) => { rejectFirst = reject; })
+      : Promise.resolve(new ArrayBuffer(4)) } };
+    try {
+      const first = loader.enqueueUrlLoad({ url: "https://example.test/missing.psd" });
+      loader.enqueueUrlLoad({ url: "https://example.test/next.psd" });
+      rejectFirst("HTTP 404 Not Found");
+      await first;
+      await new Promise(resolve => setImmediate(resolve));
+      assert.deepEqual(opened, ["https://example.test/next.psd"]);
+      assert.match(messages[0], /HTTP 404/);
+      assert.equal(busy, 0);
+      assert.equal(loader.urlLoadInProgress, false);
+    } finally { window.__TAURI__ = oldTauri; FileLoader.processLoadedBytes = oldProcessor; installToastPainter(null); }
+  });
+
+  it("routes encoded file URLs to the filesystem loader", () => {
+    const oldProcessor = FileLoader.processLoadedBytes;
+    const loader = new FileLoader(() => {});
+    let opened;
+    loader.openFileByPath = (...args) => { opened = args; };
+    try {
+      loader.enqueueUrlLoad({ url: "file:///media/Website%20PSD/home.psd", placeIntoDocIndex: null });
+      assert.deepEqual(opened, ["/media/Website PSD/home.psd", null, null]);
+      assert.equal(loader.pendingLoadSpecs.length, 0);
+    } finally { FileLoader.processLoadedBytes = oldProcessor; }
+  });
+});

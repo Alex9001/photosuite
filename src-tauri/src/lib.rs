@@ -1,7 +1,9 @@
 mod native_menu;
 mod printing;
+mod quit;
 mod sidebar_plugins;
 mod user_resources;
+mod url_loader;
 
 use serde::Serialize;
 use std::path::{Path, PathBuf};
@@ -557,6 +559,7 @@ fn take_pending_open_files(state: tauri::State<PendingOpenFiles>) -> Vec<String>
 pub fn run() {
     tauri::Builder::default()
         .manage(PendingOpenFiles::default())
+        .manage(quit::QuitState::default())
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_fs::init())
@@ -567,11 +570,9 @@ pub fn run() {
         })
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                // The webview owns the unsaved-work prompt. Hold the window open
-                // while it asks; it calls photosuite_exit_app once the user
-                // confirms. If the webview cannot be reached the close proceeds,
-                // so an unresponsive window is still closable.
-                if native_menu::request_quit(window.app_handle()) {
+                // Preserve unsaved-work prompts, with native recovery when the
+                // webview fails to acknowledge the request.
+                if quit::request_quit(window.app_handle()) {
                     api.prevent_close();
                 }
             }
@@ -592,6 +593,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             open_files,
             read_file_raw,
+            url_loader::read_url_raw,
             get_app_version,
             read_third_party_notices,
             save_file,
@@ -603,6 +605,8 @@ pub fn run() {
             photosuite_emit_menu_action,
             photosuite_install_native_menu,
             photosuite_exit_app,
+            quit::photosuite_quit_ready,
+            quit::photosuite_acknowledge_quit,
             photosuite_set_window_size,
             photosuite_get_window_size,
             take_pending_open_files,

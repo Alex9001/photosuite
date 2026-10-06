@@ -171,3 +171,34 @@ describe("ui/menu/tauri-menu-bridge.js", () => {
     delete globalThis.window.__TAURI__;
   });
 });
+
+describe("quit handshake", () => {
+  it("enables interception only after the listener exists and acknowledges after dispatch", async () => {
+    const old = window.__TAURI__;
+    const calls = [];
+    let quitHandler, finishRegistration;
+    window.__TAURI__ = {
+      core: { invoke: async (...args) => calls.push(args) },
+      event: { listen: (name, handler) => {
+        if (name === "photosuite:quit-requested") {
+          quitHandler = handler;
+          return new Promise(resolve => { finishRegistration = () => resolve(() => {}); });
+        }
+        return Promise.resolve(() => {});
+      } },
+    };
+    try {
+      const dispose = installTauriMenuActionBridge({ getMenuData: () => [], dispatchTarget: {
+        dispatch: () => calls.push(["dispatch"]),
+      } });
+      await Promise.resolve();
+      assert.deepEqual(calls, []);
+      finishRegistration();
+      await Promise.resolve();
+      assert.deepEqual(calls, [["photosuite_quit_ready"]]);
+      quitHandler({ payload: { requestId: 3 } });
+      assert.deepEqual(calls.slice(1), [["dispatch"], ["photosuite_acknowledge_quit", { requestId: 3 }]]);
+      dispose();
+    } finally { window.__TAURI__ = old; }
+  });
+});

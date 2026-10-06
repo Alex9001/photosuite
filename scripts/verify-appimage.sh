@@ -54,6 +54,7 @@ PY
   appstreamcli validate --no-net squashfs-root/usr/share/metainfo/app.photosuite.PhotoSuite.metainfo.xml
   test -s squashfs-root/usr/lib/PhotoSuite/LICENSE
   test -s squashfs-root/usr/lib/PhotoSuite/THIRD-PARTY-NOTICES.md
+  test -x squashfs-root/usr/bin/zenity
 
   # A delta update is only useful if the control file can rebuild the image, so
   # reconstruct it and compare byte for byte.

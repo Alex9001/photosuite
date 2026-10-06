@@ -3013,6 +3013,7 @@ version = "0.9.16"
 dependencies = [
  "cups_rs",
  "fontdb",
+ "reqwest",
  "serde",
  "serde_json",
  "tauri",

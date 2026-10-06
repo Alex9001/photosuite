@@ -16,7 +16,6 @@ use tauri::{AppHandle, Emitter, Manager, Runtime};
 
 const CHROME_EVENT: &str = "photosuite:chrome";
 const MENU_ACTION_EVENT: &str = "photosuite:menu-action";
-const QUIT_REQUEST_EVENT: &str = "photosuite:quit-requested";
 
 /// Menu id of the macOS App submenu Quit row. It routes through the webview so
 /// the unsaved-work prompt runs before the process ends.
@@ -29,16 +28,6 @@ fn product_name<R: Runtime, M: Manager<R>>(app: &M) -> String {
         .product_name
         .clone()
         .unwrap_or_else(|| app.package_info().name.clone())
-}
-
-/// Ask the webview to start a quit: it prompts for unsaved work and calls the
-/// `photosuite_exit_app` command once the user confirms. Returns false when the
-/// webview could not be reached, so callers can fall back to closing outright.
-pub fn request_quit<R: Runtime>(app: &AppHandle<R>) -> bool {
-    match app.get_webview_window("main") {
-        Some(win) => win.emit(QUIT_REQUEST_EVENT, json!({})).is_ok(),
-        None => false,
-    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -135,7 +124,9 @@ fn emit_menu_path<R: Runtime>(app: &AppHandle<R>, path: Vec<u32>) -> tauri::Resu
 
 fn dispatch_menu_id<R: Runtime>(app: &AppHandle<R>, raw_id: &str) -> tauri::Result<()> {
     if raw_id == QUIT_MENU_ID {
-        request_quit(app);
+        if !crate::quit::request_quit(app) {
+            app.exit(0);
+        }
         return Ok(());
     }
     const PREFIX: &str = "ps/menu/";

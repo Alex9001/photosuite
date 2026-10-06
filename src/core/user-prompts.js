@@ -94,12 +94,8 @@ export function confirmUser(message, options) {
 
 export function promptConfirmUser(message, options, callback) {
   options = options || {};
-  const sync = tryNativeConfirmSync(message);
-  if (sync !== null) {
-    callback(sync);
-    return;
-  }
-
+  // Use the host's async dialog in the desktop app. WebKit's synchronous
+  // confirm can be suppressed or stall the renderer (including quit replies).
   const tauri = typeof window !== "undefined" ? window.__TAURI__ : null;
   if (tauri && tauri.core && typeof tauri.core.invoke === "function") {
     tauri.core
@@ -115,7 +111,11 @@ export function promptConfirmUser(message, options, callback) {
       });
     return;
   }
-
+  const sync = tryNativeConfirmSync(message);
+  if (sync !== null) {
+    callback(sync);
+    return;
+  }
   callback(options.whenBlocked === "proceed");
 }
 

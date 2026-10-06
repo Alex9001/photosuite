@@ -1,0 +1,21 @@
+#!/bin/sh
+# rfd's portal backend uses the system zenity for confirmation dialogs. It
+# must not load our bundled GTK/GLib: the host zenity may need a newer ABI.
+# Keep the display/session environment, and remove only AppImage runtime paths.
+if [ -n "${APPDIR:-}" ]; then
+    host_path=
+    old_ifs=$IFS
+    IFS=:
+    for entry in $PATH; do
+        case "$entry" in
+            "$APPDIR"|"$APPDIR"/*) ;;
+            *) host_path=${host_path:+$host_path:}$entry ;;
+        esac
+    done
+    IFS=$old_ifs
+    export PATH=$host_path
+fi
+unset LD_LIBRARY_PATH LD_PRELOAD GIO_MODULE_DIR GIO_EXTRA_MODULES
+unset GTK_PATH GTK_EXE_PREFIX GTK_DATA_PREFIX GDK_PIXBUF_MODULE_FILE
+unset GDK_PIXBUF_MODULEDIR GSETTINGS_SCHEMA_DIR GI_TYPELIB_PATH
+exec zenity "$@"

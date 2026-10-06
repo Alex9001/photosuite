@@ -220,31 +220,66 @@ FileLoader.prototype._setOpenBusy = function(on) {
 };
 
 FileLoader.prototype.enqueueUrlLoad = function(loadSpec) {
+  loadSpec.url = String(loadSpec.url || "").trim();
+  if (/^file:/i.test(loadSpec.url)) {
+    try {
+      const url = new URL(loadSpec.url);
+      let path = decodeURIComponent(url.pathname);
+      if (/^\/[a-z]:\//i.test(path)) path = path.slice(1);
+      if (url.hostname && url.hostname !== "localhost") path = "//" + url.hostname + path;
+      this.openFileByPath(path, null, loadSpec.placeIntoDocIndex);
+    } catch (err) {
+      showToast("Could not open the file URL: " + String(err), 1e4);
+    }
+    return;
+  }
   this.pendingLoadSpecs.push(loadSpec);
-  this.processNextUrlLoad()
+  return this.processNextUrlLoad()
 };
 
-FileLoader.prototype.processNextUrlLoad = function() {
+FileLoader.prototype.processNextUrlLoad = async function() {
   const pendingSpecs = this.pendingLoadSpecs;
   if (pendingSpecs.length == 0 || this.urlLoadInProgress) return;
   this.urlLoadInProgress = true;
   const loadSpec = pendingSpecs.shift();
   this.showOpenVeil();
   if (loadSpec.scriptHostData == null) loadSpec.scriptHostData = {};
-  const xhr = new XMLHttpRequest();
-  attachAsyncLoadContext(xhr, loadSpec, null);
-  const requestUrl = loadSpec.url;
-  xhr.open("GET", requestUrl);
-  applyRequestHeaders(xhr, loadSpec.requestHeaders);
-  xhr.responseType = "arraybuffer";
-  xhr.onload = this.onBytesLoaded.bind(this);
-  xhr.onerror = function() {
-    this.hideOpenVeil();
+  let decodePending = false;
+  try {
+    const tauri = typeof window !== "undefined" ? window.__TAURI__ : null;
+    const bytes = tauri && tauri.core && /^https?:/i.test(loadSpec.url)
+      ? await tauri.core.invoke("read_url_raw", {
+        url: loadSpec.url, requestHeaders: loadSpec.requestHeaders || null
+      })
+      : await readBrowserUrl(loadSpec);
+    decodePending = FileLoader.processLoadedBytes(loadSpec, bytes, this, null);
+  } catch (err) {
+    console.error("[file-load] URL open failed:", err);
+    showToast("Could not open the URL: " + String(err), 1e4);
+  } finally {
+    if (!decodePending) this.hideOpenVeil();
     this.urlLoadInProgress = false;
     this.processNextUrlLoad();
-  }.bind(this);
-  xhr.send()
+  }
 };
+
+function readBrowserUrl(loadSpec) {
+  return new Promise(function(resolve, reject) {
+    const xhr = new XMLHttpRequest();
+    xhr.open("GET", loadSpec.url);
+    applyRequestHeaders(xhr, loadSpec.requestHeaders);
+    xhr.responseType = "arraybuffer";
+    xhr.timeout = 120000;
+    xhr.onload = function() {
+      if (xhr.status >= 200 && xhr.status < 300) resolve(xhr.response);
+      else reject(new Error("HTTP " + xhr.status));
+    };
+    xhr.onerror = function() { reject(new Error("Network request failed")); };
+    xhr.ontimeout = function() { reject(new Error("Download timed out")); };
+    xhr.onabort = function() { reject(new Error("Download cancelled")); };
+    xhr.send();
+  });
+}
 
 FileLoader.prototype.loadLocalFiles = function(fileList, channelRasterCallback, targetDocIndex, mutationWire, fileHandles) {
   for (let fileIdx = 0; fileIdx < fileList.length; fileIdx++) {
@@ -874,4 +909,3 @@ export function dispatchDataTransferImports(
     emitter.dispatch(fallbackEvt);
   }
 }
-

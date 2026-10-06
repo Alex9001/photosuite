@@ -640,25 +640,43 @@ function handleOpenRecentFileFailed(controller, data) {
  * prompt abandons the quit and leaves every document open.
  */
 function handleExitApplication(controller) {
-  confirmDiscardUnsavedDocuments(controller.openDocs, 0, function(shouldQuit) {
-    if (!shouldQuit) return;
-    // The window size is saved on a delay after a resize, so a quit soon after
-    // dragging the frame would otherwise beat the save to it.
-    saveWindowSizeBeforeQuit(controller).then(exitHostApplication, exitHostApplication);
-  });
+  if (controller._quitInProgress) return;
+  controller._quitInProgress = true;
+  try {
+    confirmDiscardUnsavedDocuments(controller.openDocs, 0, function(shouldQuit) {
+      if (!shouldQuit) {
+        controller._quitInProgress = false;
+        return;
+      }
+      // The window size is saved on a delay after a resize, so a quit soon after
+      // dragging the frame would otherwise beat the save to it.
+      saveWindowSizeBeforeQuit(controller).then(exitHostApplication).catch(function(err) {
+        controller._quitInProgress = false;
+        console.error("PhotoSuite: quit failed", err);
+        showToast("Could not close PhotoSuite. Please try again.");
+      });
+    });
+  } catch (err) {
+    controller._quitInProgress = false;
+    throw err;
+  }
 }
 
-function saveWindowSizeBeforeQuit(controller) {
+export function saveWindowSizeBeforeQuit(controller) {
   if (typeof controller.flushWindowSizeSave !== "function") return Promise.resolve();
-  return controller.flushWindowSizeSave().catch(function(err) {
-    console.warn("PhotoSuite: failed to save the window size on quit", err);
+  // Settings are best-effort: a stalled store/IPC must not trap the window.
+  return new Promise(function(resolve) {
+    const timer = setTimeout(resolve, 1500);
+    Promise.resolve().then(function() { return controller.flushWindowSizeSave(); })
+      .catch(function(err) { console.warn("PhotoSuite: failed to save the window size on quit", err); })
+      .finally(function() { clearTimeout(timer); resolve(); });
   });
 }
 
 function exitHostApplication() {
   const tauri = typeof window !== "undefined" ? window.__TAURI__ : null;
   if (tauri && tauri.core && typeof tauri.core.invoke === "function") {
-    tauri.core.invoke("photosuite_exit_app").catch(function() {});
+    return tauri.core.invoke("photosuite_exit_app");
   }
 }
 

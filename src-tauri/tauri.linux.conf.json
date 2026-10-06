@@ -10,6 +10,7 @@
       },
       "appimage": {
         "files": {
+          "/usr/bin/zenity": "../packaging/linux/zenity",
           "/usr/share/metainfo/app.photosuite.PhotoSuite.metainfo.xml": "../packaging/linux/app.photosuite.PhotoSuite.metainfo.xml"
         }
       }

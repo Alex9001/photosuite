@@ -1,5 +1,5 @@
 /**
- * Native Tauri drag-and-drop onto the empty-state home screen.
+ * Native Tauri file drops throughout the editor workspace.
  * Uses window-level `tauri://drag-*` events so dropped files keep absolute
  * paths and load through the same `read_file_raw` path as File → Open.
  */
@@ -52,12 +52,8 @@ export function installTauriHomeScreenFileDrop(controller) {
   }
 
   let dragDepth = 0;
+  let disposed = false;
   const unlistenFns = [];
-
-  function homeDropTargetEl() {
-    const splash = controller.splashScreen;
-    return splash && splash.homePanelRoot ? splash.homePanelRoot : null;
-  }
 
   function setHighlight(active) {
     const splash = controller.splashScreen;
@@ -67,14 +63,14 @@ export function installTauriHomeScreenFileDrop(controller) {
   }
 
   function acceptsDropAt(position) {
-    if (!homeScreenAcceptsFileDrop(controller)) return false;
-    return dropPositionOverElement(position, homeDropTargetEl());
+    if (disposed || !controller.fileLoader || controller.fileLoader._openBusyCount > 0) return false;
+    return dropPositionOverElement(position, controller.el);
   }
 
   function onDragEnter(event) {
     if (!acceptsDropAt(event.payload && event.payload.position)) return;
     dragDepth += 1;
-    setHighlight(true);
+    setHighlight(homeScreenAcceptsFileDrop(controller));
   }
 
   function onDragLeave() {
@@ -93,21 +89,29 @@ export function installTauriHomeScreenFileDrop(controller) {
     controller.fileLoader.openFilesByPaths(paths, null);
   }
 
+  function onDragOver(event) {
+    setHighlight(acceptsDropAt(event.payload && event.payload.position)
+      && homeScreenAcceptsFileDrop(controller));
+  }
+
   const listenPromises = [
     tauri.event.listen("tauri://drag-enter", onDragEnter),
+    tauri.event.listen("tauri://drag-over", onDragOver),
     tauri.event.listen("tauri://drag-leave", onDragLeave),
     tauri.event.listen("tauri://drag-drop", onDragDrop)
   ];
 
-  Promise.all(listenPromises).then(function(handles) {
-    for (let handleIdx = 0; handleIdx < handles.length; handleIdx++) {
-      unlistenFns.push(handles[handleIdx]);
-    }
-  }).catch(function(err) {
-    console.warn("photosuite: home-screen file drop listeners failed", err);
+  listenPromises.forEach(function(promise) {
+    promise.then(function(unlisten) {
+      if (disposed) unlisten();
+      else unlistenFns.push(unlisten);
+    }).catch(function(err) {
+      console.warn("photosuite: native file drop listener failed", err);
+    });
   });
 
   return function disposeTauriHomeScreenFileDrop() {
+    disposed = true;
     for (let handleIdx = 0; handleIdx < unlistenFns.length; handleIdx++) {
       unlistenFns[handleIdx]();
     }

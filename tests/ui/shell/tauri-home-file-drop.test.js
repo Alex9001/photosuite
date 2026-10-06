@@ -62,3 +62,40 @@ describe("ui/shell/tauri-home-file-drop.js", () => {
     );
   });
 });
+
+describe("native workspace drops", () => {
+  it("opens PSDs as documents even with an existing document and intro dismissed", async () => {
+    const { installTauriHomeScreenFileDrop } = await import("../../../src/ui/shell/tauri-home-file-drop.js");
+    const old = window.__TAURI__;
+    const listeners = {};
+    const opened = [];
+    window.__TAURI__ = { event: { listen: async (name, fn) => {
+      listeners[name] = fn;
+      return () => delete listeners[name];
+    } } };
+    const controller = {
+      appData: { intro: false }, openDocs: [{}], splashScreen: {},
+      el: { getBoundingClientRect: () => ({ left: 0, top: 0, right: 800, bottom: 600 }) },
+      runSavedScriptIfAny: () => false,
+      fileLoader: { _openBusyCount: 0, openFilesByPaths: (...args) => opened.push(args) },
+    };
+    try {
+      const dispose = installTauriHomeScreenFileDrop(controller);
+      await Promise.resolve();
+      const drop = listeners["tauri://drag-drop"];
+      const payload = { paths: ["/templates/home.psd"], position: { x: 200, y: 100 } };
+      drop({ payload });
+      assert.deepEqual(opened, [[["/templates/home.psd"], null]]);
+      controller.fileLoader._openBusyCount = 1;
+      drop({ payload });
+      assert.equal(opened.length, 1);
+      controller.fileLoader._openBusyCount = 0;
+      drop({ payload: { ...payload, position: { x: 900, y: 100 } } });
+      assert.equal(opened.length, 1);
+      dispose();
+      assert.deepEqual(Object.keys(listeners), []);
+      drop({ payload });
+      assert.equal(opened.length, 1);
+    } finally { window.__TAURI__ = old; }
+  });
+});

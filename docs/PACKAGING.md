@@ -52,6 +52,14 @@ portability. Every other leg declares dependencies (`.deb`, `.rpm`) or
 repackages an existing payload (Flatpak, pacman) and embeds nothing from its
 host, so those stay on the current runner.
 
+The AppImage also ships `packaging/linux/zenity` as `usr/bin/zenity`. The
+portal dialog backend launches the host's Zenity for confirmations; loading
+AppImage GTK/GLib libraries into a newer host Zenity can crash it and silently
+turn every unsaved-work confirmation into Cancel. The wrapper removes bundled
+library/module paths for that child process while retaining the display and
+session environment. Keep this wrapper executable and ahead of the host
+Zenity in the AppImage's PATH.
+
 This also fixes the AppStream metadata spelling: the 22.04 `appstreamcli` is
 AppStream 0.15, which predates the `<developer id>` element, so the AppImage's
 metainfo uses the older `<developer_name>`.

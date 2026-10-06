@@ -68,15 +68,20 @@ export function installTauriMenuActionBridge(options) {
 
   // The shell holds the window open until the exit flow prompts for unsaved
   // work and invokes the exit command back on the shell.
-  const unlistenQuitPromise = tauri.event.listen(PHOTOSUITE_QUIT_REQUEST_EVENT, function() {
+  const unlistenQuitPromise = tauri.event.listen(PHOTOSUITE_QUIT_REQUEST_EVENT, function(ev) {
     dispatchMenuActionDescriptor(dispatchTarget, {
       appEventType: EventType.uiDispatch,
       payload: { dispatchKind: UiCommand.exitApplication }
     });
+    if (tauri.core && ev.payload && ev.payload.requestId != null) {
+      tauri.core.invoke("photosuite_acknowledge_quit", { requestId: ev.payload.requestId })
+        .catch(function(err) { console.warn("PhotoSuite: quit acknowledgement failed", err); });
+    }
   });
   unlistenQuitPromise.then(function(unlisten) {
     dispatchTarget._photosuiteTauriQuitUnlisten = unlisten;
-  }).catch(function() {});
+    if (tauri.core) return tauri.core.invoke("photosuite_quit_ready");
+  }).catch(function(err) { console.warn("PhotoSuite: quit listener installation failed", err); });
 
   return function() {
     clearMenuActionUnlisten(dispatchTarget);
